@@ -1,0 +1,619 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-13T15:35:41.811Z",
+  "title": "Design System: Valigia",
+  "extensions": {
+    "colorMeta": {
+      "navy": {
+        "role": "primary",
+        "displayName": "Shell Navy",
+        "canonical": "#16213f",
+        "oklch": "oklch(25.5% 0.059 267.0)",
+        "tonalRamp": [
+          "#030823",
+          "#172240",
+          "#323f5f",
+          "#4f5d7f",
+          "#7080a4",
+          "#94a4ca",
+          "#b9caf2",
+          "#e7eeff"
+        ]
+      },
+      "navy-2": {
+        "role": "primary",
+        "displayName": "Night Navy",
+        "canonical": "#24325c",
+        "oklch": "oklch(32.8% 0.077 268.1)",
+        "tonalRamp": [
+          "#02052b",
+          "#142049",
+          "#2e3d68",
+          "#4b5c89",
+          "#6c7faf",
+          "#90a3d6",
+          "#b5c9fe",
+          "#e8eeff"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Cool Paper",
+        "canonical": "#e9ecef",
+        "oklch": "oklch(94.2% 0.005 247.9)",
+        "tonalRamp": [
+          "#090b0d",
+          "#222426",
+          "#3e4042",
+          "#5b5e60",
+          "#7e8083",
+          "#a2a5a8",
+          "#c8cbce",
+          "#eceff2"
+        ]
+      },
+      "sheet": {
+        "role": "neutral",
+        "displayName": "Sheet Grey",
+        "canonical": "#eef0f2",
+        "oklch": "oklch(95.4% 0.003 247.9)",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#232426",
+          "#3e4041",
+          "#5c5e5f",
+          "#7f8082",
+          "#a3a5a7",
+          "#c9cbcd",
+          "#edeff1"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Hairline Grey",
+        "canonical": "#cdd3db",
+        "oklch": "oklch(86.5% 0.013 255.5)",
+        "tonalRamp": [
+          "#080b11",
+          "#20242a",
+          "#3b4047",
+          "#595e65",
+          "#7b8188",
+          "#9fa5ad",
+          "#c5cbd3",
+          "#e9eff7"
+        ]
+      },
+      "field-stroke": {
+        "role": "neutral",
+        "displayName": "Field Stroke",
+        "canonical": "#aab2bf",
+        "oklch": "oklch(76.1% 0.021 260.2)",
+        "tonalRamp": [
+          "#060b14",
+          "#1e242e",
+          "#39404b",
+          "#575e6a",
+          "#79818d",
+          "#9da5b2",
+          "#c3cbd8",
+          "#e7effd"
+        ]
+      },
+      "quiet-hover": {
+        "role": "neutral",
+        "displayName": "Quiet Hover",
+        "canonical": "#e7eaf0",
+        "oklch": "oklch(93.6% 0.009 264.5)",
+        "tonalRamp": [
+          "#090b0f",
+          "#222428",
+          "#3d4044",
+          "#5b5e63",
+          "#7e8086",
+          "#a2a5aa",
+          "#c8cad0",
+          "#ebeef5"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Ink Text",
+        "canonical": "#19203a",
+        "oklch": "oklch(25.1% 0.050 271.0)",
+        "tonalRamp": [
+          "#050820",
+          "#1b223c",
+          "#363e5b",
+          "#535c7b",
+          "#757f9f",
+          "#99a3c5",
+          "#bec9ec",
+          "#e8eeff"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Slate Muted",
+        "canonical": "#565f73",
+        "oklch": "oklch(48.5% 0.034 266.1)",
+        "tonalRamp": [
+          "#050a19",
+          "#1c2435",
+          "#374052",
+          "#555e71",
+          "#778095",
+          "#9ba5bb",
+          "#c0cbe2",
+          "#e7effe"
+        ]
+      },
+      "focus": {
+        "role": "neutral",
+        "displayName": "Link Blue",
+        "canonical": "#2a47a0",
+        "oklch": "oklch(43.0% 0.149 266.5)",
+        "tonalRamp": [
+          "#010036",
+          "#07116a",
+          "#1c358d",
+          "#3756b0",
+          "#577ad8",
+          "#7ca1fd",
+          "#b4cafd",
+          "#e7efff"
+        ]
+      },
+      "warn-bg": {
+        "role": "status",
+        "displayName": "Warning Cream",
+        "canonical": "#fbecc8",
+        "oklch": "oklch(94.6% 0.050 88.1)",
+        "tonalRamp": [
+          "#110a00",
+          "#2e2203",
+          "#4b3e1f",
+          "#695c3d",
+          "#8d7f5e",
+          "#b2a381",
+          "#d8c9a6",
+          "#fcedc9"
+        ]
+      },
+      "warn": {
+        "role": "status",
+        "displayName": "Warning Brown",
+        "canonical": "#6b4a05",
+        "oklch": "oklch(43.5% 0.088 78.5)",
+        "tonalRamp": [
+          "#130900",
+          "#322000",
+          "#553a02",
+          "#785719",
+          "#9d7a3f",
+          "#c39e63",
+          "#eac488",
+          "#ffeccf"
+        ]
+      },
+      "danger": {
+        "role": "status",
+        "displayName": "Brick",
+        "canonical": "#b0321f",
+        "oklch": "oklch(50.7% 0.166 31.5)",
+        "tonalRamp": [
+          "#210000",
+          "#490500",
+          "#790e00",
+          "#a72815",
+          "#d0513c",
+          "#fb7760",
+          "#fdb6a8",
+          "#ffe9e4"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#242424",
+          "#404040",
+          "#5d5d5d",
+          "#808080",
+          "#a4a4a4",
+          "#cacaca",
+          "#eeeeee"
+        ]
+      },
+      "ink-vermilion": {
+        "role": "secondary",
+        "displayName": "Vermilion (stop 1)",
+        "canonical": "#c8402a",
+        "oklch": "oklch(56.4% 0.176 31.8)",
+        "tonalRamp": [
+          "#200000",
+          "#490500",
+          "#771304",
+          "#ab2109",
+          "#d54c35",
+          "#fb775f",
+          "#fdb6a8",
+          "#ffe9e4"
+        ]
+      },
+      "ink-ochre": {
+        "role": "secondary",
+        "displayName": "Ochre (stop 2)",
+        "canonical": "#e3a72b",
+        "oklch": "oklch(76.6% 0.147 80.2)",
+        "tonalRamp": [
+          "#130900",
+          "#322000",
+          "#543a02",
+          "#7a5605",
+          "#a57712",
+          "#d4990d",
+          "#fcbf4a",
+          "#ffeccd"
+        ]
+      },
+      "ink-ultramarine": {
+        "role": "secondary",
+        "displayName": "Ultramarine (stop 3)",
+        "canonical": "#2a47a0",
+        "oklch": "oklch(43.0% 0.149 266.5)",
+        "tonalRamp": [
+          "#010036",
+          "#07116a",
+          "#1c358d",
+          "#3756b0",
+          "#577ad8",
+          "#7ca1fd",
+          "#b4cafd",
+          "#e7efff"
+        ]
+      },
+      "ink-bottle-green": {
+        "role": "secondary",
+        "displayName": "Bottle Green (stop 4)",
+        "canonical": "#1f6b4c",
+        "oklch": "oklch(47.3% 0.090 162.1)",
+        "tonalRamp": [
+          "#001007",
+          "#012c1b",
+          "#004d32",
+          "#226d4e",
+          "#499170",
+          "#6eb694",
+          "#94ddb9",
+          "#c3ffe0"
+        ]
+      },
+      "ink-rose": {
+        "role": "secondary",
+        "displayName": "Rose (stop 5)",
+        "canonical": "#b8506f",
+        "oklch": "oklch(57.3% 0.138 3.8)",
+        "tonalRamp": [
+          "#1f0008",
+          "#49001e",
+          "#750e38",
+          "#993455",
+          "#c15877",
+          "#eb7d9b",
+          "#feb2c4",
+          "#fee8ec"
+        ]
+      },
+      "ink-teal": {
+        "role": "secondary",
+        "displayName": "Teal (stop 6)",
+        "canonical": "#1d6f78",
+        "oklch": "oklch(49.8% 0.076 205.9)",
+        "tonalRamp": [
+          "#000e11",
+          "#002a2f",
+          "#034950",
+          "#156a73",
+          "#418d96",
+          "#67b3bc",
+          "#8dd9e3",
+          "#caf8fe"
+        ]
+      },
+      "map-land": {
+        "role": "map",
+        "displayName": "Map Land",
+        "canonical": "#e6e9ed",
+        "oklch": "oklch(93.3% 0.006 255.5)",
+        "tonalRamp": [
+          "#090b0e",
+          "#222427",
+          "#3e4043",
+          "#5b5e61",
+          "#7e8084",
+          "#a2a5a9",
+          "#c8cbcf",
+          "#eceff3"
+        ]
+      },
+      "map-water": {
+        "role": "map",
+        "displayName": "Map Water",
+        "canonical": "#b4c6db",
+        "oklch": "oklch(82.0% 0.036 252.3)",
+        "tonalRamp": [
+          "#020c1a",
+          "#172535",
+          "#324152",
+          "#4f5f72",
+          "#718295",
+          "#95a7bb",
+          "#bacde2",
+          "#e4f0fe"
+        ]
+      },
+      "map-green": {
+        "role": "map",
+        "displayName": "Map Green",
+        "canonical": "#d6dfd4",
+        "oklch": "oklch(89.4% 0.018 140.0)",
+        "tonalRamp": [
+          "#070d06",
+          "#20261e",
+          "#3b4239",
+          "#586057",
+          "#7b8379",
+          "#9fa79d",
+          "#c5cec3",
+          "#e8f2e6"
+        ]
+      },
+      "map-type": {
+        "role": "map",
+        "displayName": "Map Type",
+        "canonical": "#2c3654",
+        "oklch": "oklch(33.8% 0.055 269.3)",
+        "tonalRamp": [
+          "#040822",
+          "#19223e",
+          "#343e5d",
+          "#515c7d",
+          "#737fa2",
+          "#97a4c8",
+          "#bccaef",
+          "#e8eeff"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Stop Numeral",
+        "purpose": "The stop index in the inked stop header; 48px under 860px."
+      },
+      "headline": {
+        "displayName": "Place Headline",
+        "purpose": "Uppercase stop city and pane titles; 32px in the stop header under 860px."
+      },
+      "title": {
+        "displayName": "Figure Title",
+        "purpose": "Prices (30px), day numbers and transport headings (24-26px, uppercase), scores."
+      },
+      "subtitle": {
+        "displayName": "Item Name",
+        "purpose": "Place, hotel and provider names (17-18px)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Reading text with tabular numerals; summaries cap at 65ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Field labels, hints, meta lines, source links."
+      },
+      "label-caps": {
+        "displayName": "Label City Line",
+        "purpose": "Uppercase city line inside map luggage labels only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "printed-double-rule",
+        "value": "inset 0 0 0 3px var(--ink), inset 0 0 0 4.5px var(--on-ink)",
+        "purpose": "Inner hairline of map labels and the wordmark; line work, not light."
+      },
+      {
+        "name": "printed-double-rule-small",
+        "value": "inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--on-ink)",
+        "purpose": "Same rule at chip and pin scale (resting chips use sheet for the outer ring)."
+      },
+      {
+        "name": "stamp-offset",
+        "value": "::after 1.5px solid var(--ink) outline, translate(4px, 4px)",
+        "purpose": "Misregistered second print on the active map label only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Out-expo curve for all state transitions."
+      },
+      {
+        "name": "control",
+        "value": ".2s",
+        "purpose": "Button background and color changes; press nudge .12s."
+      },
+      {
+        "name": "stamp",
+        "value": ".45s",
+        "purpose": "Label tilt (-2deg hover, -5deg active) and stamp offset."
+      },
+      {
+        "name": "ink-swap",
+        "value": ".5s",
+        "purpose": "Stop header cross-fades to the new stop ink."
+      },
+      {
+        "name": "map-fit",
+        "value": "900ms",
+        "purpose": "Map fitBounds flight with 72px padding."
+      },
+      {
+        "name": "breathe",
+        "value": "1.4s ease-in-out infinite",
+        "purpose": "Busy stop numeral in the rail."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation and transition: none",
+        "purpose": "All motion off under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "860px",
+        "purpose": "Workspace stacks: 44dvh sticky map band on top, panel below."
+      }
+    ],
+    "layout": {
+      "panelWidth": "460px",
+      "ruleWeight": "1.5px",
+      "hairlineWeight": "1px"
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main action on paper: create trip, save.",
+      "html": "<button class=\"ds-btn-primary\">Crea viaggio</button>",
+      "css": ".ds-btn-primary { display:inline-flex; align-items:center; gap:8px; min-height:40px; padding:8px 16px; border-radius:6px; border:1.5px solid transparent; background:#16213f; color:#fff; font:600 15px 'Hanken Grotesk Variable', system-ui, sans-serif; cursor:pointer; transition: background-color .2s cubic-bezier(0.16,1,0.3,1), transform .12s cubic-bezier(0.16,1,0.3,1); } .ds-btn-primary:hover { background:#24325c; } .ds-btn-primary:active { transform:translateY(1px); } .ds-btn-primary:focus-visible { outline:2px solid #2a47a0; outline-offset:2px; } .ds-btn-primary:disabled { opacity:.5; cursor:not-allowed; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Secondary action: choose, refresh, propose stops.",
+      "html": "<button class=\"ds-btn-quiet\">Scegli</button>",
+      "css": ".ds-btn-quiet { display:inline-flex; align-items:center; min-height:40px; padding:8px 16px; border-radius:6px; border:1.5px solid #16213f; background:none; color:#16213f; font:600 15px 'Hanken Grotesk Variable', system-ui, sans-serif; cursor:pointer; transition: background-color .2s cubic-bezier(0.16,1,0.3,1); } .ds-btn-quiet:hover { background:#e7eaf0; } .ds-btn-quiet:active { transform:translateY(1px); } .ds-btn-quiet:focus-visible { outline:2px solid #2a47a0; outline-offset:2px; } .ds-btn-quiet:disabled { opacity:.5; cursor:not-allowed; }"
+    },
+    {
+      "name": "Ink Button",
+      "kind": "button",
+      "refersTo": "button-ink",
+      "description": "Action carried in the active stop ink, e.g. the chosen hotel.",
+      "html": "<button class=\"ds-btn-ink\" style=\"--ink:#c8402a;--on-ink:#fff\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 8.5l3 3 7-7\" stroke=\"currentColor\" stroke-width=\"2\" fill=\"none\"/></svg> Scelto</button>",
+      "css": ".ds-btn-ink { display:inline-flex; align-items:center; gap:8px; min-height:40px; padding:8px 16px; border-radius:6px; border:0; background:var(--ink); color:var(--on-ink); font:600 15px 'Hanken Grotesk Variable', system-ui, sans-serif; cursor:pointer; } .ds-btn-ink:hover { filter:brightness(1.08); } .ds-btn-ink:focus-visible { outline:2px solid #2a47a0; outline-offset:2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Labelled field; label above in muted 13px.",
+      "html": "<label class=\"ds-field\"><span>Città</span><input placeholder=\"Siviglia\"></label>",
+      "css": ".ds-field { display:grid; gap:6px; font-family:'Hanken Grotesk Variable', system-ui, sans-serif; } .ds-field span { font-size:13px; font-weight:600; color:#565f73; } .ds-field input { min-height:42px; padding:8px 12px; border-radius:6px; border:1.5px solid #aab2bf; background:#fff; font:15px 'Hanken Grotesk Variable', system-ui, sans-serif; color:#19203a; } .ds-field input::placeholder { color:#707a8c; } .ds-field input:hover { border-color:#16213f; } .ds-field input:focus-visible { outline:2px solid #2a47a0; outline-offset:0; border-color:#2a47a0; }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "custom",
+      "description": "Sort and mode switches; navy outline, filled selection.",
+      "html": "<div class=\"ds-seg\" role=\"radiogroup\"><button role=\"radio\" aria-checked=\"true\">Qualità/prezzo</button><button role=\"radio\" aria-checked=\"false\">Prezzo</button><button role=\"radio\" aria-checked=\"false\">Recensioni</button></div>",
+      "css": ".ds-seg { display:inline-flex; border:1.5px solid #16213f; border-radius:6px; overflow:hidden; } .ds-seg button { min-height:38px; padding:6px 14px; border:0; background:none; font:600 15px 'Hanken Grotesk Variable', system-ui, sans-serif; color:#16213f; cursor:pointer; } .ds-seg button + button { border-left:1.5px solid #16213f; } .ds-seg button:hover { background:#e7eaf0; } .ds-seg button[aria-checked='true'] { background:#16213f; color:#fff; } .ds-seg button:focus-visible { outline:2px solid #2a47a0; outline-offset:-2px; }"
+    },
+    {
+      "name": "Stop Chip",
+      "kind": "chip",
+      "refersTo": "stop-chip",
+      "description": "Rail entry per stop: oval, ink numeral pill, city name; active fills with ink.",
+      "html": "<div style=\"display:flex;gap:8px;background:#eef0f2;padding:12px\"><button class=\"ds-chip is-active\" style=\"--ink:#c8402a;--on-ink:#fff\"><span class=\"ds-chip-num\">01</span>Siviglia</button><button class=\"ds-chip\" style=\"--ink:#e3a72b;--on-ink:#16213f\"><span class=\"ds-chip-num\">02</span>Cordova</button></div>",
+      "css": ".ds-chip { display:inline-flex; align-items:center; gap:7px; padding:5px 13px 5px 6px; border-radius:50%/50%; border:1.5px solid var(--ink); background:none; color:#19203a; box-shadow: inset 0 0 0 2px #eef0f2, inset 0 0 0 3px var(--ink); font:600 15px 'Hanken Grotesk Variable', system-ui, sans-serif; cursor:pointer; white-space:nowrap; } .ds-chip-num { display:grid; place-items:center; min-width:30px; height:26px; padding:0 5px; border-radius:999px; background:var(--ink); color:var(--on-ink); font:800 17px 'Big Shoulders Display', 'Arial Narrow', sans-serif; } .ds-chip:hover { background:color-mix(in srgb, var(--ink) 10%, transparent); } .ds-chip.is-active { background:var(--ink); color:var(--on-ink); box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--on-ink); } .ds-chip.is-active .ds-chip-num { background:var(--on-ink); color:var(--ink); } .ds-chip:focus-visible { outline:2px solid #2a47a0; outline-offset:2px; }"
+    },
+    {
+      "name": "Luggage Label Marker",
+      "kind": "custom",
+      "refersTo": "stop-label",
+      "description": "Signature map marker; the active label is stamped (tilt plus offset print).",
+      "html": "<div style=\"display:flex;gap:24px;padding:20px;background:#e6e9ed\"><button class=\"ds-label\" style=\"--ink:#e3a72b;--on-ink:#16213f\"><span class=\"ds-label-num\">02</span><span class=\"ds-label-city\">Cordova</span></button><button class=\"ds-label is-active\" style=\"--ink:#c8402a;--on-ink:#fff\"><span class=\"ds-label-num\">01</span><span class=\"ds-label-city\">Siviglia</span></button></div>",
+      "css": ".ds-label { --tilt:0deg; position:relative; display:grid; justify-items:center; min-width:64px; padding:6px 14px 7px; border-radius:50%/46%; background:var(--ink); color:var(--on-ink); border:0; cursor:pointer; box-shadow: inset 0 0 0 3px var(--ink), inset 0 0 0 4.5px var(--on-ink); transform:rotate(var(--tilt)); transition: transform .45s cubic-bezier(0.16,1,0.3,1); } .ds-label::after { content:''; position:absolute; inset:0; border-radius:inherit; border:1.5px solid var(--ink); opacity:0; transition: transform .45s cubic-bezier(0.16,1,0.3,1), opacity .2s; pointer-events:none; } .ds-label:hover { --tilt:-2deg; } .ds-label.is-active { --tilt:-5deg; } .ds-label.is-active::after { opacity:1; transform:translate(4px,4px); } .ds-label:focus-visible { outline:2px solid #2a47a0; outline-offset:2px; } .ds-label-num { font:800 22px/1 'Big Shoulders Display', 'Arial Narrow', sans-serif; } .ds-label-city { font:700 11px 'Hanken Grotesk Variable', system-ui, sans-serif; letter-spacing:.08em; text-transform:uppercase; }"
+    },
+    {
+      "name": "Stop Tabs",
+      "kind": "nav",
+      "description": "Stop tabs; the selected label sits on a 4px ink underline over the navy rule.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\" style=\"--ink:#c8402a\"><button role=\"tab\" aria-selected=\"false\">Itinerario</button><button role=\"tab\" aria-selected=\"true\">Luoghi</button><button role=\"tab\" aria-selected=\"false\">Hotel</button></div>",
+      "css": ".ds-tabs { display:flex; gap:2px; padding:12px 16px 0; background:#eef0f2; border-bottom:1.5px solid #16213f; } .ds-tabs button { padding:9px 12px 10px; border:0; background:none; font:700 15px 'Hanken Grotesk Variable', system-ui, sans-serif; color:#565f73; border-bottom:4px solid transparent; margin-bottom:-1.5px; cursor:pointer; } .ds-tabs button:hover { color:#19203a; } .ds-tabs button[aria-selected='true'] { color:#19203a; border-bottom-color:var(--ink); } .ds-tabs button:focus-visible { outline:2px solid #2a47a0; outline-offset:-2px; }"
+    },
+    {
+      "name": "Status Tags",
+      "kind": "chip",
+      "refersTo": "tag-warn",
+      "description": "Pill tags for verification and state.",
+      "html": "<span class=\"ds-tag ds-tag-ok\">Verificato</span> <span class=\"ds-tag ds-tag-warn\">Non verificato</span>",
+      "css": ".ds-tag { display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:999px; font:700 12px 'Hanken Grotesk Variable', system-ui, sans-serif; letter-spacing:.02em; border:1.5px solid currentColor; } .ds-tag-ok { color:#1f6b4c; } .ds-tag-warn { color:#6b4a05; background:#fbecc8; border-color:transparent; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Luggage Label Collection",
+    "overview": "Valigia prints a trip the way a 1950s hotel printed its luggage labels: flat lithographic inks on cool paper, a navy shell, and one label per stop stuck on the route. Each stop owns one ink in travel order. Selecting a stop \"stamps\" its label on the map (a small rotation plus a misregistered second print run) and floods the stop header and active controls with that ink. The trip is collected as you plan it.\n\nThe working surface is a persistent console: a fixed-width panel of stop chips, tabs and sourced figures beside a full-height map that has been repainted in the app's own paper and ink. The density is a reference setting, not a brochure. Big condensed numerals act as handles (stop 01, price, score, day), and every figure sits next to its source.\n\nDepth comes from print, never from light. Surfaces are flat ink, separated by 1.5px printed rules. The only offset in the system is the stamped active label.",
+    "keyCharacteristics": [
+      "Navy shell, cool paper-grey working ground, six sequenced stop inks.",
+      "Ovals with a printed double rule (outer ink, thin inner hairline) as the signature form.",
+      "Big Shoulders Display 800 for numerals and uppercase place names; Hanken Grotesk for everything read.",
+      "1.5px rules carry structure; no blurred shadows, no glass.",
+      "A per-stop ink is set once as `--ink` / `--on-ink` and every ink-bearing part reads it."
+    ],
+    "rules": [
+      {
+        "name": "The One Ink Per Stop Rule",
+        "body": "A stop's ink is set once as `--ink` / `--on-ink` from the sequence and inherited; components never pick a stop color themselves. Ochre pairs with navy text, every other ink with white.",
+        "section": "colors"
+      },
+      {
+        "name": "The Quiet Frame Rule",
+        "body": "Navy, sheet and paper carry the interface; saturated color appears only as a stop ink or a status (warn, danger).",
+        "section": "colors"
+      },
+      {
+        "name": "The Numeral Handle Rule",
+        "body": "Numbers that a user scans (stop index, price, score, day) are set in the display face at 800; the units and qualifiers under them fall back to 12px Hanken in muted.",
+        "section": "typography"
+      },
+      {
+        "name": "The Uppercase Belongs To Places Rule",
+        "body": "Uppercase is reserved for display-face place and pane names, the wordmark, and the map label city line. Body and UI labels stay sentence case.",
+        "section": "typography"
+      },
+      {
+        "name": "The Print Not Light Rule",
+        "body": "No blurred or ambient shadows, no glass or backdrop blur. If something needs separation, give it a rule or an ink fill.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Single Stamp Rule",
+        "body": "The misregistered offset belongs to the one active stop label. Nothing else on screen is offset.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do take each stop's color from the ink sequence via `--ink` / `--on-ink`, cycling by stop index.",
+      "Do separate surfaces with 1.5px rules (navy for structure, Hairline Grey for list rows) instead of shadows.",
+      "Do set scannable numbers in Big Shoulders Display 800 and their units in 12px Hanken muted.",
+      "Do draw identity marks as ovals or pills with the printed double rule; keep working controls at 6px.",
+      "Do repaint any new map layer in the paper, water and navy values of the tinted basemap.",
+      "Do honor reduced motion: all transitions and animations switch off."
+    ],
+    "donts": [
+      "Don't use blurred shadows, glass or backdrop blur; depth is print.",
+      "Don't put gradients on surfaces. The loading shimmer is the only gradient, and it is a loading state, not a surface.",
+      "Don't offset or rotate anything except the active stop label.",
+      "Don't introduce a stop color outside the six-ink sequence.",
+      "Don't set body or UI labels in uppercase; uppercase belongs to display-face place names and the label city line."
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+node_modules/
+dist/
+
+# impeccable working files (screenshots, decision logs); design.json and surfaces stay
+.impeccable/review/
+.impeccable/questions/
+.impeccable/mocks/
+
+# Android build output and signing material
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/build/
+*.keystore
+*.jks
+key.properties
+
+# Kotlin compiler crash logs
+.kotlin/
