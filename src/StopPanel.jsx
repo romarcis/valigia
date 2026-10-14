@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ArrowClockwiseIcon, ArrowSquareOutIcon, BedIcon, TrashIcon, HourglassIcon,
+  ArrowClockwiseIcon, ArrowSquareOutIcon, BedIcon, TrashIcon, HourglassIcon, ForkKnifeIcon, DotsThreeVerticalIcon,
   PersonSimpleWalkIcon, TrainSimpleIcon, TrainIcon, BusIcon, TramIcon, CarIcon, BoatIcon, AirplaneTiltIcon, TaxiIcon, PathIcon,
 } from '@phosphor-icons/react'
-import { stopOffsets, addDays, walkMinutes, placeTags } from './util.js'
+import { stopOffsets, addDays, walkMinutes, dayNumbers, dayTone } from './util.js'
 import { canSearch } from './ai.js'
-import { dayInk } from './MapView.jsx'
+
+import Combobox from './Combobox.jsx'
+import { searchFood, searchHotels, resolvePlace } from './search.js'
 
 const MODE_ICON = { walk: PersonSimpleWalkIcon, metro: TrainSimpleIcon, bus: BusIcon, tram: TramIcon, train: TrainIcon, car: CarIcon, ferry: BoatIcon, flight: AirplaneTiltIcon, taxi: TaxiIcon }
 const ModeIcon = ({ mode, size = 20 }) => { const I = MODE_ICON[mode] || PathIcon; return <I size={size} aria-hidden /> }
@@ -29,19 +31,26 @@ function Skeleton({ rows = 4 }) {
 }
 
 // How to get from the previous stop of the day: walking computed from coordinates, transit as the AI estimated it.
-function Transfer({ t, walk, tr }) {
+// `go` is the traveller's pick among the modes shown (saved on the item); the first mode until they pick.
+function Transfer({ t, walk, tr, drive, go, onGo }) {
   const line = x => `${x.line ? `${x.line} · ` : ''}${t.min(x.min)}`
   const modes = [
     walk != null && ['walk', `≈ ${t.min(walk)}`],
+    drive && ['car', `${drive.km.toLocaleString(t.locale)} km · ${t.min(drive.min)}`], // computed on the roads
     tr?.metro?.min && ['metro', line(tr.metro)],
     tr?.tram?.min && ['tram', line(tr.tram)],
     tr?.bus?.min && ['bus', line(tr.bus)],
-    tr?.car_min && ['car', t.min(tr.car_min)],
+    !drive && tr?.car_min && ['car', t.min(tr.car_min)],
   ].filter(Boolean)
   if (!modes.length) return null
+  const chosen = modes.some(([m]) => m === go) ? go : modes[0][0]
   return (
     <li className="transfer" aria-label={t.transfer}>
-      {modes.map(([m, txt]) => <span key={m} title={t.modes[m]}><ModeIcon mode={m} size={16} /> {txt}</span>)}
+      {modes.map(([m, txt]) => (
+        <button key={m} type="button" title={t.modes[m]} aria-pressed={modes.length > 1 ? m === chosen : undefined} disabled={!onGo || modes.length < 2} onClick={() => onGo(m)}>
+          <ModeIcon mode={m} size={16} /> {txt}
+        </button>
+      ))}
     </li>
   )
 }
@@ -54,7 +63,7 @@ function placeIndex(stop, it) {
 }
 
 // Right-click (or the keyboard menu key) on an itinerary item: move it to another day, or up/down.
-function ItemMenu({ t, lang, days, at, x, y, onMove, onClose }) {
+function ItemMenu({ t, lang, days, at, x, y, onMove, onRemove, onInsert, onClose }) {
   const ref = useRef(null)
   useEffect(() => {
     ref.current?.querySelector('button')?.focus()
@@ -67,7 +76,7 @@ function ItemMenu({ t, lang, days, at, x, y, onMove, onClose }) {
   const go = to => { onMove(at, to); onClose() }
   const count = days[at.d].items.length
   return (
-    <div ref={ref} className="ctx" role="menu" style={{ left: Math.min(x, window.innerWidth - 250), top: Math.min(y, window.innerHeight - 60 - days.length * 40) }}>
+    <div ref={ref} className="ctx" role="menu" style={{ left: Math.max(8, Math.min(x, window.innerWidth - 250)), top: Math.max(8, Math.min(y, window.innerHeight - 250 - days.length * 40)) }}>
       {at.i > 0 && <button role="menuitem" onClick={() => go({ d: at.d, i: at.i - 1 })}>{t.moveUp}</button>}
       {at.i < count - 1 && <button role="menuitem" onClick={() => go({ d: at.d, i: at.i + 2 })}>{t.moveDown}</button>}
       {days.map((d, k) => k !== at.d && (
@@ -75,12 +84,16 @@ function ItemMenu({ t, lang, days, at, x, y, onMove, onClose }) {
           {t.moveToDay(k + 1)} <span className="muted">{fmtDate(lang, d.date)}</span>
         </button>
       ))}
+      <p className="ctx-head">{t.addAfter}</p>
+      {t.breaks.map(b => <button key={b} role="menuitem" className="ctx-add" onClick={() => { onInsert(at, b); onClose() }}><ForkKnifeIcon size={14} aria-hidden /> {b}</button>)}
+      <button role="menuitem" className="ctx-danger" onClick={() => { onRemove(at); onClose() }}>{t.removeFromDay}</button>
     </div>
   )
 }
 
-function Days({ t, stop, lang, picked, onPick, onMove, inkOf }) {
-  const tags = placeTags(stop)
+function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVenue, onGo, inkOf }) {
+  const { places: tags, venues: venueTags } = dayNumbers(stop)
+  const [editing, setEditing] = useState(null) // `${day}:${item}` whose venue is being chosen
   const drag = useRef(null) // {d, i} of the item being dragged
   const [drop, setDrop] = useState(null) // {d, i} insert position under the pointer
   const [menu, setMenu] = useState(null) // {at: {d, i}, x, y}
@@ -105,7 +118,7 @@ function Days({ t, stop, lang, picked, onPick, onMove, inkOf }) {
       <ol className="days">
         {stop.days.map((d, i) => {
           // With the hotel on the map, the day leaves from it and comes back to it (first and last route legs).
-          const home = stop.hotel?.lat != null && d.items.some(it => stop.places[placeIndex(stop, it)]?.lat != null) ? stop.hotel : null
+          const home = stop.hotel?.lat != null && d.items.some(it => (stop.places[placeIndex(stop, it)] || it.venue)?.lat != null) ? stop.hotel : null
           let last = home // last point of the day with coordinates
           let leg = -1 // index into d.route.legs: one leg between each pair of located places
           return (
@@ -121,19 +134,22 @@ function Days({ t, stop, lang, picked, onPick, onMove, inkOf }) {
                 {d.items.flatMap((it, j) => {
                   const idx = placeIndex(stop, it)
                   const p = idx != null ? stop.places[idx] : null
-                  const located = p?.lat != null
+                  const point = p || it.venue // a meal at a chosen venue is a stop of the walk too
+                  const located = point?.lat != null
+                  const prev = last
                   if (located && last) leg++
-                  const walk = located && last ? (d.route?.legs?.[leg] ?? walkMinutes(last, p)) : null
-                  if (located) last = p
+                  const walk = located && last ? (d.route?.legs?.[leg] ?? walkMinutes(last, point)) : null
+                  if (located) last = point
+                  const key = `${i}:${j}`
                   const cls = [
-                    idx != null && idx === picked && 'is-picked',
+                    (idx != null ? idx === picked : key === picked) && 'is-picked',
                     drop?.d === i && drop.i === j && 'drop-before',
                     drag.current?.d === i && drag.current.i === j && 'is-dragging',
                   ].filter(Boolean).join(' ')
                   const row = (
                     <li
-                      key={j} data-place={idx ?? undefined} className={cls || undefined}
-                      draggable onDragStart={e => { drag.current = { d: i, i: j }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', it.place) }}
+                      key={j} data-place={idx ?? (it.venue ? key : undefined)} className={cls || undefined}
+                      draggable={editing !== key} onDragStart={e => { drag.current = { d: i, i: j }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', it.place) }}
                       onDragOver={e => overRow(e, i, j)} onDragEnd={end}
                       onContextMenu={e => { e.preventDefault(); setMenu({ at: { d: i, i: j }, x: e.clientX || 24, y: e.clientY || e.currentTarget.getBoundingClientRect().bottom }) }}
                       title={t.dragHint}
@@ -145,7 +161,15 @@ function Days({ t, stop, lang, picked, onPick, onMove, inkOf }) {
                             <span className="pin pin-inline" style={{ '--ink': inkOf(i).bg, '--on-ink': inkOf(i).fg }} aria-hidden>{tags[idx]?.n}</span>
                             <strong>{it.place}</strong>
                           </button>
-                        ) : <strong tabIndex={0}>{it.place}</strong>}
+                        ) : (
+                          <>
+                            <strong>{it.place}</strong>
+                            <Venue
+                              t={t} venue={it.venue} n={venueTags[key]?.n} ink={inkOf(i)} picked={picked === key} onPick={() => onPick(key)} near={prev || stop} editing={editing === key}
+                              onEdit={on => setEditing(on ? key : null)} onSet={v => { setEditing(null); onVenue(i, j, v) }}
+                            />
+                          </>
+                        )}
                         {it.note && <p>{it.note}</p>}
                         {(p?.minutes || p?.url) && (
                           <p className="meta">
@@ -155,12 +179,18 @@ function Days({ t, stop, lang, picked, onPick, onMove, inkOf }) {
                         )}
                       </div>
                       {p?.img && <img src={p.img} alt="" loading="lazy" draggable={false} />}
+                      <button
+                        type="button" className="icon-btn row-menu" aria-label={t.moveMenu(it.place)} title={t.moveMenu(it.place)}
+                        onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ at: { d: i, i: j }, x: r.left - 180, y: r.bottom }) }}
+                      >
+                        <DotsThreeVerticalIcon size={20} weight="bold" aria-hidden />
+                      </button>
                     </li>
                   )
-                  return j > 0 || walk != null ? [<Transfer key={`t${j}`} t={t} walk={walk} tr={it.transfer} />, row] : [row]
+                  return j > 0 || walk != null ? [<Transfer key={`t${j}`} t={t} walk={walk} tr={it.transfer} drive={walk != null ? d.route?.drives?.[leg] : null} go={it.go} onGo={m => onGo(i, j, m)} />, row] : [row]
                 })}
                 {home && last !== home && [
-                  <Transfer key="back" t={t} walk={d.route?.legs?.[leg + 1] ?? walkMinutes(last, home)} />,
+                  <Transfer key="back" t={t} walk={d.route?.legs?.[leg + 1] ?? walkMinutes(last, home)} drive={d.route?.drives?.[leg + 1]} go={d.backGo} onGo={m => onGo(i, 'back', m)} />,
                   <HotelRow key="hotel-end" t={t} name={home.name} back />,
                 ]}
               </ol>
@@ -168,19 +198,51 @@ function Days({ t, stop, lang, picked, onPick, onMove, inkOf }) {
           )
         })}
       </ol>
-      {menu && <ItemMenu t={t} lang={lang} days={stop.days} {...menu} onMove={onMove} onClose={() => setMenu(null)} />}
+      {menu && <ItemMenu t={t} lang={lang} days={stop.days} {...menu} onMove={onMove} onRemove={onRemove} onInsert={(at, b) => { onInsert(at, b); setEditing(`${at.d}:${at.i + 1}`) }} onClose={() => setMenu(null)} />}
     </>
   )
 }
 
 // The hotel is place 0 of every day: where it starts and where it ends.
+// Where a meal or break happens: none until the traveller picks a restaurant, café or bar near the previous stop.
+function Venue({ t, venue, n, ink, picked, onPick, near, editing, onEdit, onSet }) {
+  // Keyed on the coordinates: the stop object changes on every update and would restart the debounce.
+  const lat = near?.lat, lng = near?.lng
+  const search = useCallback(q => (q.trim().length < 2 ? [] : searchFood(q, { lat, lng })), [lat, lng])
+  if (editing) {
+    return (
+      <Combobox
+        label={t.venueAsk} placeholder={t.venuePh} emptyText={t.noVenue} autoFocus delay={300}
+        value={null} display={v => v.name} onChange={async v => onSet(await resolvePlace(v))} search={search} onDismiss={() => onEdit(false)}
+        renderOption={v => <><b>{v.name}</b> <span className="muted">{v.addr}</span>{v.gid && <span className="by-google">Google Maps</span>}</>}
+      />
+    )
+  }
+  if (!venue) return <button className="link venue-add" onClick={() => onEdit(true)}><ForkKnifeIcon size={14} aria-hidden /> {t.chooseVenue}</button>
+  return (
+    <div className="venue">
+      <p>
+        <button className="tl-place" aria-pressed={picked} onClick={onPick} disabled={venue.lat == null}>
+          {n && <span className="pin pin-inline" style={{ '--ink': ink.bg, '--on-ink': ink.fg }} aria-hidden>{n}</span>}
+          <ForkKnifeIcon size={14} aria-hidden /> <b>{venue.name}</b>
+        </button>
+      </p>
+      <p className="venue-sub">
+        {venue.addr && <span>{venue.addr}</span>}
+        <button className="link" onClick={() => onEdit(true)}>{t.change}</button>
+        <button className="link" onClick={() => onSet(null)}>{t.remove}</button>
+      </p>
+    </div>
+  )
+}
+
 function HotelRow({ t, name, back }) {
   return (
     <li className="tl-hotel">
-      <time />
+      <span className="tl-hotel-icon"><BedIcon size={18} aria-hidden /></span>
       <div>
         <span className="tl-place"><span className="pin pin-inline" aria-hidden>0</span><strong>{name}</strong></span>
-        <p><BedIcon size={14} aria-hidden /> {back ? t.hotelBack : t.hotelLeave}</p>
+        <p>{back ? t.hotelBack : t.hotelLeave}</p>
       </div>
     </li>
   )
@@ -189,17 +251,9 @@ function HotelRow({ t, name, back }) {
 // Where the traveller sleeps in this stop: typed in, never suggested. Saving it recomputes the walking times.
 function HotelBox({ t, stop, onSave }) {
   const saved = stop.hotel?.name || ''
-  const [name, setName] = useState(saved || stop.chosenHotel || '')
   const [editing, setEditing] = useState(!saved)
-  const [saving, setSaving] = useState(false)
-
-  const submit = async e => {
-    e.preventDefault()
-    setSaving(true)
-    await onSave(name.trim())
-    setSaving(false)
-    setEditing(!name.trim())
-  }
+  const { lat, lng, city, country } = stop // stop changes on every update: key the search on these
+  const search = useCallback(q => (q.trim().length < 2 ? [] : searchHotels(q, { lat, lng, city, country })), [lat, lng, city, country])
 
   if (!editing) {
     return (
@@ -212,16 +266,16 @@ function HotelBox({ t, stop, onSave }) {
     )
   }
   return (
-    <form className="hotel-box" onSubmit={submit}>
-      <label className="field"><span>{t.hotelAsk(stop.city)}</span>
-        <input value={name} placeholder={t.hotelPh} onChange={e => setName(e.target.value)} />
-      </label>
+    <div className="hotel-box">
+      <Combobox
+        label={t.hotelAsk(stop.city)} placeholder={t.hotelPh} emptyText={t.noHotel} delay={300} autoFocus={!!saved}
+        value={stop.hotel?.lat != null ? stop.hotel : null} display={h => h.name} search={search}
+        onChange={async h => { setEditing(false); onSave(await resolvePlace(h)) }} onDismiss={saved ? () => setEditing(false) : undefined}
+        renderOption={h => <><b>{h.name}</b> <span className="muted">{h.addr}</span>{h.gid && <span className="by-google">Google Maps</span>}</>}
+      />
       <p className="hint">{t.hotelHint}</p>
-      <div className="row">
-        <button className="btn btn-ink" disabled={saving || name.trim() === saved} aria-busy={saving}>{saving ? t.hotelSaving : t.save}</button>
-        {saved && <button type="button" className="btn btn-quiet" onClick={() => { setName(saved); setEditing(false) }}>{t.cancel}</button>}
-      </div>
-    </form>
+      {saved && <button className="link" onClick={() => { onSave(null); setEditing(true) }}>{t.hotelRemove}</button>}
+    </div>
   )
 }
 
@@ -303,7 +357,7 @@ function Fetch({ t, label, hint, Icon, onRun, busy, err, warn }) {
   )
 }
 
-export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab, picked, onPick, onMove, busy, errors, settings, run, onSaveHotel, onDelete }) {
+export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab, picked, onPick, onMove, onRemove, onInsert, onVenue, onGo, busy, errors, settings, run, onSaveHotel, onDelete }) {
   const stop = trip.stops[active]
   const lang = trip.lang
   const from = addDays(trip.startDate, stopOffsets(trip)[active])
@@ -359,11 +413,12 @@ export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab
       </div>
 
       <div className="tabpanel" role="tabpanel" id="tabpanel" aria-labelledby={`tab-${tab}`}>
+        <h2 className="sr-only">{tabs.find(([id]) => id === tab)?.[1]}</h2>
         {(tab === 'days' || tab === 'places') && (
           busy[k('plan')] ? <><p className="muted">{t.planningStop(stop.city)}</p><Skeleton rows={8} /></>
           : errors[k('plan')] ? <div className="fetch"><p className="error" role="alert">{errors[k('plan')]}</p><button className="btn btn-ink" onClick={() => run('plan')}>{t.retry}</button></div>
           : !stop.planned ? <div className="fetch"><button className="btn btn-ink" onClick={() => run('plan')}>{t.replan}</button></div>
-          : tab === 'days' ? <Days t={t} stop={stop} lang={lang} picked={picked} onPick={onPick} onMove={onMove} inkOf={d => dayInk(inks, active, d)} /> : <Places t={t} stop={stop} picked={picked} onPick={onPick} />
+          : tab === 'days' ? <Days t={t} stop={stop} lang={lang} picked={picked} onPick={onPick} onMove={onMove} onRemove={onRemove} onInsert={onInsert} onVenue={onVenue} onGo={onGo} inkOf={d => dayTone(inks[active % inks.length], d, stop.days.length)} /> : <Places t={t} stop={stop} picked={picked} onPick={onPick} />
         )}
 
         {tab === 'moves' && (stop.moves && !busy[k('moves')] ? (

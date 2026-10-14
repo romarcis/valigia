@@ -65,18 +65,83 @@ export function joinLegs(legs) {
 // The stretch of a day's route from its start to waypoint w (nothing for w = 0).
 export const routeUpTo = (route, w) => (w > 0 ? route.coords.slice(0, route.cuts[w - 1] + 1) : [])
 
-// Day and number of each place in the itinerary: numbers restart from 1 every day (the hotel is 0).
-// tags[placeIndex] = { day, n }, undefined for places no day visits.
-export function placeTags(stop) {
-  const tags = []
+// Numbers of the itinerary, restarting from 1 every day (the hotel is 0): places and chosen meal venues share
+// the day's sequence. places[placeIndex] = { day, n } (undefined for places no day visits);
+// venues[`${day}:${item}`] = { day, n }.
+export function dayNumbers(stop) {
+  const places = [], venues = {}
   stop.days?.forEach((d, day) => {
     let n = 0
-    for (const it of d.items) {
+    d.items.forEach((it, j) => {
       const i = it.placeIdx ?? stop.places.findIndex(p => p.name === it.place)
-      if (i >= 0 && !tags[i]) tags[i] = { day, n: ++n }
-    }
+      if (i >= 0) { if (!places[i]) places[i] = { day, n: ++n } }
+      else if (it.venue) venues[`${day}:${j}`] = { day, n: ++n }
+    })
   })
-  return tags
+  return { places, venues }
+}
+export const placeTags = stop => dayNumbers(stop).places
+
+// Removes the places still without coordinates (and their itinerary items), keeping every placeIdx right.
+// Returns { places, days, dropped: [names] }; the same arrays when nothing is missing.
+export function dropUnlocated(places, days) {
+  const gone = new Set(places.flatMap((p, i) => (p.lat == null ? [i] : [])))
+  if (!gone.size) return { places, days, dropped: [] }
+  const kept = days.map(d => {
+    const items = d.items.filter(it => !gone.has(it.placeIdx))
+    return { ...d, items: items.map((it, k) => (k ? it : { ...it, transfer: null })) } // a new first item has no transfer
+  })
+  const r = renumber(places, kept) // dropped places are visited by no day: they end up last
+  return { places: r.places.filter(p => p.lat != null), days: r.days, dropped: [...gone].map(i => places[i].name) }
+}
+
+// Do two names of a sight share a meaningful word? Generic words (church, palace, saint…) and accents
+// are ignored: "Chiesa di San Michele Arcangelo" matches "Chiesa di San Michele", not "Chiesa di San Pietro".
+// ponytail: Italian/English generic words only; extend GENERIC if other languages give false matches.
+const GENERIC = new Set(['chiesa', 'del', 'della', 'dei', 'degli', 'delle', 'san', 'santo', 'santa', 'santi', 'sant', 'palazzo', 'museo', 'piazza', 'parrocchiale', 'basilica', 'castello', 'torre', 'villa', 'church', 'saint', 'the', 'palace', 'museum', 'square'])
+const words = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(w => w.length > 2 && !GENERIC.has(w))
+export const sameName = (a, b) => { const wb = new Set(words(b)); return words(a).some(w => wb.has(w)) }
+
+// Day d (0-based) of a stop with n days, as a tone of the stop's ink: day 1 is the ink itself, later days
+// mix it with the paper (down to 35%), so days stay told apart without borrowing another stop's ink.
+// Text on the tone is white or navy, whichever contrasts more.
+const mix = (a, b, t) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * t + parseInt(b.slice(i, i + 2), 16) * (1 - t)).toString(16).padStart(2, '0')).join('')
+const lum = hex => {
+  const c = [1, 3, 5].map(i => { const v = parseInt(hex.slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 })
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+}
+export const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05) }
+export function dayTone(ink, d, n) {
+  if (!d) return ink
+  const bg = mix(ink.bg, '#eef0f2', 1 - d * Math.min(0.4, 0.65 / Math.max(1, n - 1)))
+  return { bg, fg: contrast(bg, '#ffffff') >= contrast(bg, '#16213f') ? '#ffffff' : '#16213f' }
+}
+
+// Removes itinerary item at = {d, i}. The item that now follows the gap loses its AI transit estimate and
+// its mode choice (both described the leg from the removed item), and the day loses its street route.
+export function removeItem(days, at) {
+  return days.map((d, k) => {
+    if (k !== at.d) return d
+    const { route, ...rest } = d
+    const items = d.items.filter((_, i) => i !== at.i)
+    return { ...rest, items: items.map((it, i) => (i === at.i || i === 0 ? { ...it, transfer: null, go: undefined } : it)) }
+  })
+}
+
+// Inserts a break (coffee, lunch, dinner: no place, a venue can be chosen later) right after item at = {d, i}.
+// Its time sits halfway to the next item, or an hour after the last one. The walk is unchanged: a break
+// without a venue is not a stop of the route.
+const toMin = hhmm => { const [h, m] = (hhmm || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null }
+const toHHMM = min => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+export function insertBreak(days, at, place) {
+  return days.map((d, k) => {
+    if (k !== at.d) return d
+    const now = toMin(d.items[at.i]?.time), next = toMin(d.items[at.i + 1]?.time)
+    const time = now == null ? '' : toHHMM(next != null && next > now ? Math.round((now + next) / 2 / 5) * 5 : now + 60)
+    const items = [...d.items]
+    items.splice(at.i + 1, 0, { time, place, placeIdx: null, note: '', transfer: null })
+    return { ...d, items }
+  })
 }
 
 // Moves an itinerary item. from = {d, i}; to = {d, i} where to.i is the insert position among the

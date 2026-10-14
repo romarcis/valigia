@@ -158,10 +158,14 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 .pane h1, .empty h1 { font-family: var(--display); font-weight: 800; font-size: 40px; line-height: .95; text-transform: uppercase; color: var(--navy); }
 .pane fieldset { margin: 0; padding: 18px 0 0; border: 0; border-top: 1.5px solid var(--rule-strong); display: grid; gap: 14px; }
 .pane legend { padding: 0 10px 0 0; font-weight: 700; color: var(--navy); }
-.idea { background: none; }
 
 .provider { display: grid; gap: 12px; padding-top: 18px; border-top: 1.5px solid var(--rule); }
-.provider.is-on { border-top-color: var(--rule-strong); }
+/* the provider in use: a navy-tinted card with a navy rule, so it stands out at a glance */
+.provider.is-on {
+  margin: 4px -14px; padding: 16px 14px; border: 1.5px solid var(--navy); border-radius: var(--r);
+  background: color-mix(in srgb, var(--navy) 7%, var(--sheet));
+}
+.provider.is-on + .provider { border-top-color: transparent; }
 .provider-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
 .provider-head .btn { white-space: nowrap; }
 .provider h2 { font-size: 18px; color: var(--navy); }
@@ -175,12 +179,29 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 
 /* ---------- luggage labels: the signature ---------- */
 
+/* A stop on the overview map: ink oval, printed double rule, numeral over the city line. The active one is stamped. */
+.label {
+  position: relative; display: grid; justify-items: center; gap: 1px; min-width: 64px; padding: 6px 14px 7px; border: 0; border-radius: 50% / 46%;
+  background: var(--ink); color: var(--on-ink); cursor: pointer;
+  box-shadow: inset 0 0 0 3px var(--ink), inset 0 0 0 4.5px var(--on-ink);
+  transition: transform .45s var(--ease);
+}
+.label b { font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1; }
+.label span { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.label:hover { transform: rotate(-2deg); }
+.label.is-active { transform: rotate(-5deg); }
+.label.is-active::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; border: 1.5px solid var(--ink);
+  transform: translate(4px, 4px); pointer-events: none;
+}
+.label:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+
 
 .pin {
   display: grid; place-items: center; min-width: 30px; height: 22px; padding: 0 6px; border-radius: 50% / 50%;
   background: var(--ink); color: var(--on-ink); border: 0; cursor: pointer;
   box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--on-ink);
-  font-family: var(--display); font-size: 15px; font-weight: 800;
+  font-family: var(--ui); font-size: 13px; font-weight: 800;
 }
 
 .map-overview {
@@ -190,7 +211,8 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .map-overview[aria-pressed='true'] { background: var(--navy); color: #fff; }
-.maplibregl-popup-content { font: 600 14px var(--ui); color: var(--text); border-radius: var(--r); padding: 8px 12px; }
+.maplibregl-popup-content { font: 600 14px var(--ui); color: var(--text); border-radius: var(--r); padding: 8px 12px; border: 1.5px solid var(--navy); box-shadow: none; }
+.maplibregl-popup-tip { display: none; }
 
 /* ---------- stop panel ---------- */
 
@@ -219,7 +241,7 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 }
 .stop-num { font-family: var(--display); font-weight: 800; font-size: 64px; line-height: .8; opacity: .9; }
 .stop-head h1 { font-family: var(--display); font-weight: 800; font-size: 40px; line-height: .95; text-transform: uppercase; overflow-wrap: anywhere; }
-.stop-head p { margin-top: 6px; font-weight: 600; opacity: .92; }
+.stop-head p { margin-top: 6px; font-weight: 600; }
 .stop-summary { padding: 16px 20px 4px; color: var(--muted); max-width: 65ch; }
 
 .tabs {
@@ -241,7 +263,7 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 .day-n { font-family: var(--display); font-weight: 800; font-size: 26px; text-transform: uppercase; color: var(--navy); }
 .day-title { margin: 2px 0 12px; font-weight: 600; }
 .timeline { list-style: none; margin: 0; padding: 0; border-left: 1.5px solid var(--ink); }
-.timeline li { position: relative; display: grid; grid-template-columns: 54px 1fr auto; gap: 10px; padding: 0 0 16px 14px; }
+.timeline li { position: relative; display: grid; grid-template-columns: 54px 1fr auto auto; gap: 10px; padding: 0 0 16px 14px; }
 .timeline li::before { content: ''; position: absolute; left: -6px; top: 6px; width: 9px; height: 9px; border-radius: 99px; background: var(--sheet); border: 1.5px solid var(--ink); }
 .timeline time { font-weight: 700; color: var(--muted); }
 .timeline p { color: var(--muted); font-size: 14px; }
@@ -332,7 +354,6 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
   position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 5; max-height: 45%;
   display: grid; grid-template-rows: auto 1fr; border-radius: var(--r);
   background: var(--navy); color: #e6e9f2; border: 1.5px solid var(--navy);
-  box-shadow: 0 8px 24px rgba(22, 33, 63, .28);
 }
 .log-head { display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 14px; border-bottom: 1px solid #3a4975; }
 .log-head h2 { flex: 1; font-size: 14px; }
@@ -359,14 +380,17 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 /* transfers: their own colour (route blue) and a dashed connector, so they never read as a stop */
 .timeline li.transfer {
   display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 14px 14px; padding: 6px 0 6px 14px;
-  border-left: 2px dashed #7d93c4; font-size: 12.5px; font-weight: 700; color: #233a73;
+  border-left: 2px dashed var(--field-stroke); font-size: 12.5px; font-weight: 700; color: var(--navy);
 }
 .timeline li.transfer::before { display: none; }
-.timeline li.transfer span {
+.timeline li.transfer button {
   display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
-  padding: 3px 9px 3px 7px; border-radius: 999px; background: #dfe6f3;
+  padding: 3px 9px 3px 7px; border-radius: 999px; background: #e7eaf0;
 }
-.timeline li.transfer span:first-child { background: #233a73; color: #fff; }
+.timeline li.transfer button { border: 1.5px solid transparent; font: inherit; color: inherit; cursor: pointer; }
+.timeline li.transfer button:hover:not(:disabled) { border-color: var(--navy); }
+.timeline li.transfer button:disabled { cursor: default; }
+.timeline li.transfer button[aria-pressed='true'] { background: var(--navy); color: #fff; }
 
 /* drag to reorder */
 .timeline li[draggable='true'] { cursor: grab; }
@@ -376,7 +400,6 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 .ctx {
   position: fixed; z-index: 60; min-width: 220px; display: grid; padding: 6px;
   background: var(--sheet); border: 1.5px solid var(--navy); border-radius: var(--r);
-  box-shadow: 0 10px 28px rgba(22, 33, 63, .22);
 }
 .ctx button {
   display: flex; justify-content: space-between; gap: 16px; padding: 9px 12px; border: 0; border-radius: 4px;
@@ -393,9 +416,8 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 .packing {
   position: fixed; inset: 0; z-index: 50; display: grid; place-content: center; justify-items: center; gap: 14px;
   padding: 24px; text-align: center; color: var(--navy);
-  /* the app stays visible behind, blurred; a light veil keeps the text readable */
-  background: rgba(238, 240, 242, .22);
-  -webkit-backdrop-filter: blur(14px) saturate(1.1); backdrop-filter: blur(14px) saturate(1.1);
+  /* an opaque paper wash: print, not glass */
+  background: rgba(233, 236, 239, .95);
 }
 .pk-art { width: min(300px, 70vw); height: auto; overflow: visible; }
 .pk-num { font-family: var(--display); font-weight: 800; font-size: 13px; }
@@ -430,7 +452,9 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 .wiz-progress .is-done { background: var(--navy); }
 .wiz-step { display: grid; gap: 16px; animation: wiz-in .35s var(--ease); }
 @keyframes wiz-in { from { opacity: 0; transform: translateX(12px); } }
-.wiz-q { font-family: var(--display); font-weight: 800; font-size: 30px; line-height: 1; text-transform: uppercase; color: var(--navy); }
+.wiz-q { font-family: var(--display); font-weight: 800; font-size: 32px; line-height: 1; color: var(--navy); }
+.wiz-count { margin-top: -14px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.wiz-picked { margin-top: -6px; font-size: 13px; font-weight: 600; color: var(--navy); }
 .wiz-nav { display: flex; justify-content: space-between; gap: 12px; }
 .wiz-nav .btn-primary { margin-left: auto; min-height: 48px; padding-inline: 22px; font-size: 16px; }
 .wiz-wait { padding: 18px 0; font-weight: 600; color: var(--navy); animation: breathe 1.4s ease-in-out infinite; }
@@ -458,7 +482,9 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 .idea-card b { font-size: 16px; color: var(--navy); }
 .idea-card span { font-size: 14px; color: var(--muted); }
 .idea-card:hover { border-color: var(--navy); }
-.idea-card[aria-pressed='true'] { border-color: var(--navy); box-shadow: inset 0 0 0 1.5px var(--navy); background: #e3e8f3; }
+.idea-card[aria-pressed='true'] { border-color: var(--navy); background: var(--navy); }
+.idea-card[aria-pressed='true'] b { color: #fff; }
+.idea-card[aria-pressed='true'] span { color: #c9d0e3; }
 @media (prefers-reduced-motion: reduce) { .wiz-step { animation: none; } }
 .pin-hotel { cursor: default; }
 
@@ -475,10 +501,10 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 
 /* place card: opened from a pin on the map */
 .place-card {
-  position: absolute; top: 16px; right: 16px; z-index: 4; width: min(360px, calc(100% - 32px)); max-height: calc(100% - 32px);
+  position: fixed; top: 76px; right: 16px; z-index: 30; width: min(360px, calc(100% - 32px)); max-height: calc(100dvh - 92px);
   display: grid; grid-template-rows: auto 1fr; overflow: hidden; border-radius: var(--r);
-  background: var(--sheet); border: 1.5px solid var(--ink); box-shadow: 0 10px 28px rgba(22, 33, 63, .22);
-  animation: wiz-in .3s var(--ease);
+  background: var(--sheet); border: 1.5px solid var(--ink);
+  animation: fade-in .3s var(--ease);
 }
 .place-card > img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; display: block; }
 .place-card-close { position: absolute; top: 8px; right: 8px; background: var(--sheet); color: var(--navy); border-color: var(--rule-strong); }
@@ -489,3 +515,66 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 .place-card-body p { font-size: 14px; }
 .place-card-body .place-why { font-weight: 600; }
 @media (prefers-reduced-motion: reduce) { .place-card { animation: none; } }
+
+/* ---------- combobox ---------- */
+
+.combo { position: relative; }
+.combo > label { font-size: 13px; font-weight: 600; color: var(--muted); }
+.combo-list {
+  position: absolute; z-index: 20; top: 100%; left: 0; right: 0; margin: 4px 0 0; padding: 4px; list-style: none;
+  max-height: 300px; overflow-y: auto; background: #fff; border: 1.5px solid var(--navy); border-radius: var(--r);
+}
+.combo-list li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; padding: 8px 10px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+.combo-list li[aria-selected='true'] { background: var(--navy); color: #fff; }
+.combo-list li[aria-selected='true'] .muted { color: #c9d0e3; }
+.combo-empty { color: var(--muted); cursor: default; }
+
+/* meal venue chosen by the traveller */
+.venue { margin: 2px 0 4px; }
+.venue p:first-child { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.venue-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 13px; }
+.venue-sub .link { font-size: 13px; }
+.venue-add { display: flex; width: fit-content; font-size: 13px; margin-top: 6px; }
+.pin-meal { cursor: default; width: 26px; min-width: 26px; height: 26px; padding: 0; border-radius: 999px; }
+
+/* required credit on Google Places results */
+.by-google { margin-left: auto; font-size: 11px; font-weight: 700; letter-spacing: .02em; color: var(--muted); }
+.combo-list li[aria-selected='true'] .by-google { color: #c9d0e3; }
+
+@keyframes fade-in { from { opacity: 0; } }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tl-hotel-icon { display: grid; justify-items: start; color: var(--ink); padding-top: 2px; }
+
+/* the row menu: always there on touch, on hover or focus with a mouse */
+.row-menu { width: 32px; height: 32px; color: var(--muted); align-self: start; }
+.row-menu:hover { color: var(--navy); background: #e7eaf0; }
+@media (hover: hover) and (pointer: fine) {
+  .row-menu { opacity: 0; }
+  .timeline li:hover .row-menu, .row-menu:focus-visible { opacity: 1; }
+}
+
+/* the browser's own surfaces, in the palette */
+::selection { background: color-mix(in srgb, var(--ink) 25%, transparent); }
+* { scrollbar-color: #aab2bf transparent; }
+
+/* phone: the map belongs to the trip; the place card is a sheet from the bottom; touch-sized targets */
+@media (max-width: 860px) {
+  .app:not(.view-trip) .workspace { grid-template-rows: auto; }
+  .app:not(.view-trip) .map-wrap { display: none; }
+  .place-card {
+    position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 30; width: auto; max-height: 62dvh;
+    border-radius: var(--r) var(--r) 0 0; border-width: 1.5px 0 0;
+  }
+  .place-card > img { aspect-ratio: 16 / 7; }
+}
+@media (pointer: coarse) {
+  .timeline li.transfer button { min-height: 40px; padding-inline: 12px; }
+  .venue-add, .timeline .meta a, .venue-sub .link { min-height: 40px; display: inline-flex; align-items: center; }
+  .row-menu { width: 40px; height: 40px; }
+  .pin { min-width: 36px; height: 28px; }
+}
+.venue .tl-place:disabled { cursor: default; }
+.ctx .ctx-danger { color: var(--danger); border-top: 1px solid var(--rule); border-radius: 0 0 4px 4px; }
+.ctx .ctx-danger:hover, .ctx .ctx-danger:focus-visible { background: var(--danger); color: #fff; }
+.ctx .ctx-head { margin: 4px 0 0; padding: 8px 12px 4px; border-top: 1px solid var(--rule); font-size: 12px; font-weight: 700; color: var(--muted); }
+.ctx .ctx-add { justify-content: flex-start; gap: 8px; align-items: center; }

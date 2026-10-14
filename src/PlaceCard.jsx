@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { XIcon, ArrowSquareOutIcon, HourglassIcon } from '@phosphor-icons/react'
 import { wikiIntro } from './wiki.js'
 
 // Opened from a pin on the map: the place's photo, why it is in the plan and the longer Wikipedia introduction.
+// Rendered on <body>: on a phone it is a sheet over the panel, which the map's own layer could never reach.
 export default function PlaceCard({ t, place: p, tag, ink, onClose }) {
   const [intro, setIntro] = useState(null) // null while loading
   useEffect(() => {
@@ -18,7 +20,7 @@ export default function PlaceCard({ t, place: p, tag, ink, onClose }) {
   }, [onClose])
 
   const text = intro || p.extract // the short extract is the fallback while loading or offline
-  return (
+  return createPortal(
     <aside className="place-card" aria-label={p.name} style={{ '--ink': ink.bg, '--on-ink': ink.fg }}>
       {p.img && <img src={p.img} alt="" />}
       <button className="icon-btn place-card-close" aria-label={t.close} onClick={onClose}><XIcon size={18} weight="bold" aria-hidden /></button>
@@ -32,6 +34,7 @@ export default function PlaceCard({ t, place: p, tag, ink, onClose }) {
           {p.url && <a href={p.url} target="_blank" rel="noreferrer">{t.readMore} <ArrowSquareOutIcon size={13} aria-hidden /></a>}
         </p>
       </div>
-    </aside>
+    </aside>,
+    document.body,
   )
 }

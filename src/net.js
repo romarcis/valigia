@@ -1,7 +1,7 @@
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
 import { openUrl } from '@tauri-apps/plugin-opener'
 
-const inTauri = '__TAURI_INTERNALS__' in window
+export const inTauri = '__TAURI_INTERNALS__' in window
 
 // Tauri's fetch skips browser CORS; plain fetch keeps `npm run dev` usable in a browser.
 export const http = inTauri ? tauriFetch : window.fetch.bind(window)

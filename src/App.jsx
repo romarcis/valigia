@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GearSixIcon, PlusIcon, MapTrifoldIcon, ListBulletsIcon } from '@phosphor-icons/react'
-import MapView, { dayInk } from './MapView.jsx'
+import MapView from './MapView.jsx'
 import Settings, { isConnected } from './Settings.jsx'
 import NewTrip from './NewTrip.jsx'
 import StopPanel from './StopPanel.jsx'
 import { STRINGS, errorText } from './i18n.js'
 import { planStop, findTransport } from './planner.js'
-import { moveItem, renumber, routeUpTo, placeTags } from './util.js'
+import { moveItem, removeItem, insertBreak, renumber, routeUpTo, dayNumbers, dropUnlocated, dayTone } from './util.js'
 import { log } from './net.js'
 import LogPanel, { useLog } from './LogPanel.jsx'
 import PackingLoader from './PackingLoader.jsx'
 import PlaceCard from './PlaceCard.jsx'
-import { walkRoute } from './routing.js'
-import { locatePlaces, nominatim } from './geo.js'
+import { walkRoute, driveLegs } from './routing.js'
+import { locatePlaces } from './geo.js'
 import { ring } from './bell.js'
 
 // Lithographic label inks, one per stop in travel order.
@@ -25,9 +25,9 @@ export const INKS = [
   { bg: '#1d6f78', fg: '#ffffff' },
 ]
 
-// The points a day's walk goes through: the hotel (when on the map), the located places in order, the hotel again.
+// The points a day's walk goes through: the hotel (when on the map), the located places and meal venues in order, the hotel again.
 function dayPoints(stop, d) {
-  const pts = d.items.map(it => stop.places[it.placeIdx ?? stop.places.findIndex(p => p.name === it.place)]).filter(p => p?.lat != null)
+  const pts = d.items.map(it => stop.places[it.placeIdx ?? stop.places.findIndex(p => p.name === it.place)] || it.venue).filter(p => p?.lat != null)
   return stop.hotel?.lat != null && pts.length ? [stop.hotel, ...pts, stop.hotel] : pts
 }
 
@@ -52,7 +52,7 @@ export default function App() {
   const [active, setActive] = useState(0)
   const [tab, setTab] = useState('days')
   const [overview, setOverview] = useState(true)
-  const [picked, setPicked] = useState(null) // index into the active stop's places
+  const [picked, setPicked] = useState(null) // index into the active stop's places, or a meal venue's `${day}:${item}`
   const [card, setCard] = useState(false) // the picked place's card, opened from the map
   const [busy, setBusy] = useState({}) // `${stopId}:${job}` -> true
   const [errors, setErrors] = useState({}) // `${stopId}:${job}` -> message
@@ -84,12 +84,7 @@ export default function App() {
     const t0 = Date.now()
     log('info', `${s.city}: inizio ${{ plan: 'pianificazione', moves: 'ricerca spostamenti' }[job]}`)
     try {
-      if (job === 'plan') {
-        const planned = await planStop(settings, tr, idx)
-        const h = planned.hotel
-        if (h?.name && h.lat == null) planned.hotel = { name: h.name, ...(await nominatim(h.name, planned).catch(() => null)) }
-        updateStop(tr.id, s.id, planned)
-      }
+      if (job === 'plan') updateStop(tr.id, s.id, await planStop(settings, tr, idx))
       if (job === 'moves') updateStop(tr.id, s.id, { moves: await findTransport(settings, tr, idx) })
       log('ok', `${s.city}: completato in ${Math.round((Date.now() - t0) / 1000)}s`)
     } catch (e) {
@@ -122,17 +117,10 @@ export default function App() {
     setActive(0)
   }
 
-  // The traveller's own hotel: located on the map, then every day's walk starts and ends there.
-  // Returns false when the name was saved but OpenStreetMap could not place it.
-  const saveHotel = async name => {
-    const tr = trip, s = stop
-    const days = s.days?.map(({ route, ...d }) => d) // drop routes so they are recomputed from the hotel
-    if (!name) return updateStop(tr.id, s.id, { hotel: null, days })
-    let at = null
-    try { at = await nominatim(name, s) } catch (e) { log('error', `OpenStreetMap: ${name}: ${e.message}`) }
-    log(at ? 'ok' : 'error', `${s.city}: hotel «${name}» ${at ? 'trovato sulla mappa' : 'non trovato sulla mappa'}`)
-    updateStop(tr.id, s.id, { hotel: { name, ...at }, days })
-    return !!at
+  // The traveller's own hotel, picked from the map search (or null): every day's walk starts and ends there.
+  const saveHotel = hotel => {
+    updateStop(trip.id, stop.id, { hotel, days: stop.days?.map(({ route, ...d }) => d) }) // routes are recomputed from the hotel
+    if (hotel) log('ok', `${stop.city}: hotel «${hotel.name}»`)
   }
 
   const closeCard = useCallback(() => setCard(false), [])
@@ -140,14 +128,16 @@ export default function App() {
   // From the map: highlight the place and show the tab that lists it (Places only lists what the itinerary skips).
   const pickFromMap = useCallback(i => {
     setPicked(i)
-    setCard(true)
-    const inDays = stop?.days?.some(d => d.items.some(it => (it.placeIdx ?? stop.places.findIndex(p => p.name === it.place)) === i))
+    setCard(true) // places only: a venue has no card
+    const inDays = typeof i === 'string' || stop?.days?.some(d => d.items.some(it => (it.placeIdx ?? stop.places.findIndex(p => p.name === it.place)) === i))
     setTab(inDays ? 'days' : 'places')
   }, [stop])
   const pickFromList = useCallback(i => { setPicked(p => (p === i ? null : i)); setCard(false); setOverview(false) }, [])
   const places = useMemo(() => (overview || !stop?.places ? [] : stop.places), [overview, stop])
   // Day and number of each place: pins take that day's colour and its number within the day.
-  const tags = useMemo(() => (stop?.places ? placeTags(stop) : []), [stop])
+  const numbers = useMemo(() => (stop?.places ? dayNumbers(stop) : { places: [], venues: {} }), [stop])
+  const tags = numbers.places
+  const venues = useMemo(() => (overview || !stop?.days ? [] : stop.days.flatMap((d, day) => d.items.flatMap((it, j) => (it.venue?.lat != null ? [{ ...it.venue, day, key: `${day}:${j}`, n: numbers.venues[`${day}:${j}`]?.n }] : [])))), [overview, stop, numbers])
 
   // For the stop on screen: first locate places Wikipedia left without coordinates (once),
   // then compute each day's street walking route (once, stored with the day).
@@ -156,19 +146,31 @@ export default function App() {
     let cancelled = false
     if (!stop.located && stop.places.some(p => p.lat == null)) {
       ;(async () => {
-        const places = await locatePlaces(stop.places, stop)
+        const located = await locatePlaces(stop.places, stop)
         if (cancelled) return
-        // routes were drawn without the newly located places: recompute them
-        updateStop(trip.id, stop.id, { places, located: true, days: stop.days.map(({ route, ...d }) => d) })
+        // routes were drawn without the newly located places: recompute them. A place that is still
+        // nowhere on the map is most likely invented: it leaves the plan.
+        const r = dropUnlocated(located, stop.days.map(({ route, ...d }) => d))
+        if (r.dropped.length) {
+          log('info', `${stop.city}: tolti dal piano ${r.dropped.length} luoghi che non esistono sulla mappa (${r.dropped.join(', ')})`)
+          setPicked(null)
+        }
+        updateStop(trip.id, stop.id, { places: r.places, days: r.days, located: true })
       })()
       return () => { cancelled = true }
     }
-    if (stop.days.every(d => d.route?.cuts)) return // routes from older versions lack cuts: recompute them
+    // Routes from older versions lack cuts or the drives: recompute them.
+    const fresh = d => d.route?.cuts && d.route.drives !== undefined
+    if (stop.days.every(fresh)) return
     ;(async () => {
       const days = []
       for (const d of stop.days) {
-        if (d.route?.cuts) { days.push(d); continue }
-        days.push({ ...d, route: await walkRoute(dayPoints(stop, d)) })
+        if (fresh(d)) { days.push(d); continue }
+        const pts = dayPoints(stop, d)
+        const route = await walkRoute(pts)
+        // Every leg also by car, on the roads (null when the router fails, so it is not retried).
+        route.drives = await driveLegs(pts).catch(() => null)
+        days.push({ ...d, route })
         if (cancelled) return
       }
       updateStop(trip.id, stop.id, { days })
@@ -178,7 +180,8 @@ export default function App() {
 
   // The day that holds the picked place is drawn on top up to that place; the rest of it is dimmed like the other days.
   const dayRoutes = useMemo(() => (overview || !stop?.days ? [] : stop.days.flatMap((d, i) => {
-    const w = picked == null ? -1 : dayPoints(stop, d).indexOf(stop.places[picked])
+    const target = typeof picked === 'string' ? stop.days[+picked.split(':')[0]]?.items[+picked.split(':')[1]]?.venue : stop.places[picked]
+    const w = picked == null || !target ? -1 : dayPoints(stop, d).indexOf(target)
     const coords = d.route?.coords || []
     if (w < 0 || !d.route?.cuts) return [{ day: i, hot: w >= 0, coords }]
     const done = routeUpTo(d.route, w)
@@ -186,7 +189,7 @@ export default function App() {
   })), [overview, stop, picked])
 
   return (
-    <div className="app" style={stop && view === 'trip' ? { '--ink': INKS[active % INKS.length].bg, '--on-ink': INKS[active % INKS.length].fg } : undefined}>
+    <div className={`app view-${view}`} style={stop && view === 'trip' ? { '--ink': INKS[active % INKS.length].bg, '--on-ink': INKS[active % INKS.length].fg } : undefined}>
       <header className="appbar">
         <span className="wordmark">Valigia</span>
         {trips.length > 0 && view === 'trip' && (
@@ -223,10 +226,32 @@ export default function App() {
             <StopPanel
               t={t} trip={trip} active={active} onSelect={selectStop} inks={INKS}
               tab={tab} setTab={setTab} picked={picked} onPick={pickFromList}
+              onGo={(d, j, go) => updateStop(trip.id, stop.id, {
+                // j is the item the transfer leads to, or 'back' for the walk back to the hotel
+                days: stop.days.map((day, k) => (k !== d ? day : j === 'back' ? { ...day, backGo: go } : { ...day, items: day.items.map((it, n) => (n === j ? { ...it, go } : it)) })),
+              })}
+              onVenue={(d, j, venue) => updateStop(trip.id, stop.id, {
+                // the walk changes around this item: its route and the AI transit estimates in and out of it are stale
+                days: stop.days.map((day, k) => {
+                  if (k !== d) return day
+                  const { route, ...rest } = day
+                  return { ...rest, items: day.items.map((it, n) => (n === j ? { ...it, venue, transfer: null } : n === j + 1 ? { ...it, transfer: null } : it)) }
+                }),
+              })}
               onMove={(from, to) => {
                 const next = renumber(stop.places, moveItem(stop.days, from, to))
-                if (picked != null) setPicked(next.places.indexOf(stop.places[picked])) // the highlight follows its place
+                // the highlight follows its place; a venue's key changes with its position, so it is dropped
+                setPicked(p => (typeof p === 'number' ? next.places.indexOf(stop.places[p]) : null))
                 updateStop(trip.id, stop.id, next)
+              }}
+              onInsert={(at, place) => {
+                setPicked(p => (typeof p === 'number' ? p : null)) // venue keys after the insert shift by one
+                updateStop(trip.id, stop.id, { days: insertBreak(stop.days, at, place) })
+              }}
+              onRemove={at => {
+                // a removed place stays in the stop's places: it shows up again under Luoghi
+                setPicked(null)
+                updateStop(trip.id, stop.id, renumber(stop.places, removeItem(stop.days, at)))
               }} busy={busy} errors={errors} settings={settings}
               run={async job => {
                 if (job !== 'plan') return run(trip, active, job)
@@ -240,10 +265,10 @@ export default function App() {
 
         <section className="map-wrap">
           {card && !overview && stop?.places?.[picked] && (
-            <PlaceCard t={t} place={stop.places[picked]} tag={tags[picked]} ink={tags[picked] ? dayInk(INKS, active, tags[picked].day) : INKS[active % INKS.length]} onClose={closeCard} />
+            <PlaceCard t={t} place={stop.places[picked]} tag={tags[picked]} ink={dayTone(INKS[active % INKS.length], tags[picked]?.day ?? 0, stop.days.length)} onClose={closeCard} />
           )}
           {showLog && <LogPanel t={t} entries={logEntries} onClose={() => setShowLog(false)} />}
-          <MapView stops={trip?.stops || []} active={active} places={places} tags={tags} hotel={overview ? null : stop?.hotel} routes={dayRoutes} inks={INKS} overview={overview} selected={overview ? null : picked} onPick={pickFromMap} />
+          <MapView stops={trip?.stops || []} active={active} places={places} tags={tags} venues={venues} hotel={overview ? null : stop?.hotel} routes={dayRoutes} dayCount={stop?.days?.length || 1} inks={INKS} onStop={selectStop} overview={overview} selected={overview ? null : picked} onPick={pickFromMap} />
           {trip && (
             <button className="map-overview" aria-pressed={overview} onClick={() => setOverview(o => !o)}>
               <MapTrifoldIcon size={18} aria-hidden /> {trip.title}

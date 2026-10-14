@@ -17,3 +17,14 @@ export async function walkRoute(points) {
     return { coords: points.map(p => [p.lng, p.lat]), cuts: points.slice(1).map((_, k) => k + 1), legs: [], streets: false }
   }
 }
+
+// Driving distance and time of every leg through points [{lat,lng}], in one request to the FOSSGIS OSRM car
+// router: [{ km, min }] with one entry per pair of consecutive points, like walkRoute's legs.
+export async function driveLegs(points) {
+  if (points.length < 2) return []
+  const path = points.map(p => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join(';')
+  const data = await getJson(`https://routing.openstreetmap.de/routed-car/route/v1/driving/${path}?overview=false`, { timeout: 20000, retries: 1 })
+  const r = data.routes?.[0]
+  if (data.code !== 'Ok' || !r) throw new Error(data.code || 'no route')
+  return r.legs.map(l => ({ km: Math.round(l.distance / 100) / 10, min: Math.max(1, Math.round(l.duration / 60)) }))
+}

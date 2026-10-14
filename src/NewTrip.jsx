@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { PlusIcon, MinusIcon, XIcon, ArrowLeftIcon, ArrowRightIcon, SparkleIcon } from '@phosphor-icons/react'
 import { suggestStops, suggestDestinations } from './planner.js'
 import { errorText } from './i18n.js'
 import { addDays } from './util.js'
+import Combobox from './Combobox.jsx'
+import { searchDestinations, searchHotels, resolvePlace } from './search.js'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const blankStop = () => ({ city: '', country: '', nights: 2 })
@@ -23,7 +25,7 @@ function Stepper({ label, value, min, max, onChange, unit }) {
 // One question per screen: what kind of trip, when and how long, where, who, the stops, then the hotels.
 export default function NewTrip({ t, settings, onCreate, onCancel }) {
   const [step, setStep] = useState(0)
-  const [f, setF] = useState({ likes: [], more: '', startDate: today(), nights: 7, region: '', travelers: 2, pace: 'mid' })
+  const [f, setF] = useState({ likes: [], more: '', startDate: today(), nights: 7, dest: null, travelers: 2, pace: 'mid' })
   const [ideas, setIdeas] = useState(null)
   const [stops, setStops] = useState([])
   const [stopsFor, setStopsFor] = useState(null) // the answers the current stops were proposed for
@@ -35,7 +37,10 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
   const interests = [...f.likes, f.more.trim()].filter(Boolean).join(', ')
   const valid = stops.filter(s => s.city.trim())
   const total = stops.reduce((n, s) => n + (Number(s.nights) || 0), 0)
-  const key = JSON.stringify([f.region.trim(), f.nights, f.pace, interests])
+  // The destination is always picked from a list; its description ("comune italiano", "regione della Spagna") tells the AI which one.
+  const destText = f.dest ? (f.dest.desc ? `${f.dest.name} (${f.dest.desc})` : f.dest.name) : ''
+  const findDest = useCallback(q => (q.trim().length < 2 ? [] : searchDestinations(q, settings.lang)), [settings.lang])
+  const key = JSON.stringify([destText, f.nights, f.pace, interests])
   const fmt = iso => new Intl.DateTimeFormat(settings.lang, { weekday: 'short', day: 'numeric', month: 'long' }).format(new Date(iso + 'T12:00:00'))
 
   const run = async job => {
@@ -50,7 +55,7 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
   })
 
   const proposeStops = () => run(async () => {
-    setStops(await suggestStops(settings, { region: f.region.trim(), days: f.nights, lang: settings.lang, pace: PACE[f.pace], interests }))
+    setStops(await suggestStops(settings, { region: destText, days: f.nights, lang: settings.lang, pace: PACE[f.pace], interests }))
     setStopsFor(key)
   })
 
@@ -60,7 +65,7 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
 
-  const can = { what: true, when: !!f.startDate, where: !!f.region.trim(), who: true, stops: valid.length > 0 && !busy, sleep: valid.length > 0 }[STEPS[step]]
+  const can = { what: true, when: !!f.startDate, where: !!f.dest, who: true, stops: valid.length > 0 && !busy, sleep: valid.length > 0 }[STEPS[step]]
   const last = step === STEPS.length - 1
 
   const submit = e => {
@@ -68,12 +73,12 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
     if (!can) return
     if (!last) { setErr(null); setStep(s => s + 1); return }
     onCreate({
-      title: f.region.trim() || valid.map(s => s.city).join(' · '),
+      title: f.dest?.name || valid.map(s => s.city).join(' · '),
       startDate: f.startDate,
       travelers: Number(f.travelers) || 1,
       pace: PACE[f.pace],
       interests,
-      stops: valid.map(s => ({ city: s.city.trim(), country: s.country.trim(), nights: Math.max(1, Number(s.nights) || 1), ...(s.hotel?.trim() && { hotel: { name: s.hotel.trim() } }) })),
+      stops: valid.map(s => ({ city: s.city.trim(), country: s.country.trim(), nights: Math.max(1, Number(s.nights) || 1), ...(s.hotel && { hotel: s.hotel }) })),
     })
   }
 
@@ -84,9 +89,10 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
         {onCancel && <button type="button" className="btn btn-quiet" onClick={onCancel}>{t.cancel}</button>}
       </div>
 
-      <div className="wiz-progress" aria-label={t.stepOf(step + 1, STEPS.length)}>
+      <div className="wiz-progress" role="progressbar" aria-valuemin={1} aria-valuemax={STEPS.length} aria-valuenow={step + 1} aria-label={t.stepOf(step + 1, STEPS.length)}>
         {STEPS.map((s, i) => <span key={s} className={i <= step ? 'is-done' : ''} />)}
       </div>
+      <p className="wiz-count">{t.stepOf(step + 1, STEPS.length)}</p>
 
       {STEPS[step] === 'what' && (
         <section className="wiz-step">
@@ -116,7 +122,12 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
       {STEPS[step] === 'where' && (
         <section className="wiz-step">
           <h2 className="wiz-q">{t.qWhere}</h2>
-          <label className="field"><span>{t.qWhereLabel}</span><input autoFocus value={f.region} placeholder={t.qWherePh} onChange={e => set({ region: e.target.value })} /></label>
+          <Combobox
+            label={t.qWhereLabel} placeholder={t.qWherePh} emptyText={t.noDest} autoFocus delay={400}
+            value={f.dest} display={d => d.name} onChange={d => set({ dest: d })} search={findDest}
+            renderOption={d => <><b>{d.name}</b> <span className="muted">{d.desc}</span></>}
+          />
+          {f.dest?.desc && <p className="wiz-picked">{f.dest.name}: {f.dest.desc}</p>}
           <div className="wiz-ideas">
             <p className="muted">{t.qWhereUnsure}</p>
             <button type="button" className="btn btn-quiet" onClick={findIdeas} disabled={busy} aria-busy={busy}>
@@ -128,7 +139,7 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
                   const name = d.country && !d.name.includes(d.country) ? `${d.name}, ${d.country}` : d.name
                   return (
                     <li key={name}>
-                      <button type="button" className="idea-card" aria-pressed={f.region === name} onClick={() => set({ region: name })}>
+                      <button type="button" className="idea-card" aria-pressed={f.dest?.name === d.name} onClick={() => set({ dest: { name: d.name, desc: d.country } })}>
                         <b>{name}</b><span>{d.why}</span>
                       </button>
                     </li>
@@ -159,7 +170,7 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
 
       {STEPS[step] === 'stops' && (
         <section className="wiz-step">
-          <h2 className="wiz-q">{t.qStops(f.region.trim())}</h2>
+          <h2 className="wiz-q">{t.qStops(f.dest?.name)}</h2>
           {busy ? <p className="wiz-wait" aria-live="polite">{t.thinkingStops}</p> : (
             <>
               <p className="muted">{t.qStopsHint} · {t.nights(total)}</p>
@@ -190,9 +201,12 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
           <h2 className="wiz-q">{t.qSleep}</h2>
           <p className="muted">{t.qSleepHint}</p>
           {stops.map((s, i) => s.city.trim() && (
-            <label key={i} className="field"><span>{s.city} · {t.nights(Number(s.nights) || 1)}</span>
-              <input autoFocus={i === 0} value={s.hotel || ''} placeholder={t.hotelPh} onChange={e => setStop(i, { hotel: e.target.value })} />
-            </label>
+            <Combobox
+              key={`${i}:${s.city}`} label={`${s.city} · ${t.nights(Number(s.nights) || 1)}`} placeholder={t.hotelPh} emptyText={t.noHotel}
+              autoFocus={i === 0} delay={300} value={s.hotel || null} display={h => h.name} onChange={async h => setStop(i, { hotel: await resolvePlace(h) })}
+              search={q => (q.trim().length < 2 ? [] : searchHotels(q, { city: s.city, country: s.country }))}
+              renderOption={h => <><b>{h.name}</b> <span className="muted">{h.addr}</span>{h.gid && <span className="by-google">Google Maps</span>}</>}
+            />
           ))}
         </section>
       )}

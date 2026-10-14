@@ -45,3 +45,10 @@ export function wikiIntro(url) {
   }
   return intros.get(url)
 }
+
+// Titles of the Wikipedia pages with coordinates closest to a point (up to 100, within 10 km):
+// real, mappable candidates for the AI to choose places from.
+export async function nearbyPages(lang, lat, lng) {
+  const q = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', origin: '*', list: 'geosearch', gscoord: `${lat}|${lng}`, gsradius: '10000', gslimit: '100' })
+  return ((await getJson(`https://${lang}.wikipedia.org/w/api.php?${q}`)).query?.geosearch || []).map(g => g.title)
+}

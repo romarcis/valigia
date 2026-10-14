@@ -1,4 +1,5 @@
 import { getJson, log } from './net.js'
+import { findNear } from './search.js'
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
@@ -27,7 +28,7 @@ async function wikidataCoords(lang, titles) {
 }
 
 // OpenStreetMap search, bounded to ~25 km around the city so namesakes elsewhere don't match.
-export async function nominatim(name, stop) {
+async function nominatim(name, stop) {
   const q = new URLSearchParams({ q: `${name}, ${stop.city}`, format: 'jsonv2', limit: '1' })
   if (stop.lat != null) {
     const d = 0.25
@@ -39,7 +40,7 @@ export async function nominatim(name, stop) {
 }
 
 // Fills in coordinates for places Wikipedia left without them: Wikidata first (from the page we
-// already link, and its English page), then OpenStreetMap. Returns a new places array.
+// already link, and its English page), then OpenStreetMap (Nominatim, then Photon). Returns a new places array.
 export async function locatePlaces(places, stop) {
   const out = places.map(p => ({ ...p }))
   const missing = () => out.filter(p => p.lat == null)
@@ -70,6 +71,15 @@ export async function locatePlaces(places, stop) {
       log('error', `OpenStreetMap: ${p.name}: ${e.message}`)
     }
     await sleep(1100)
+  }
+
+  // Last try: a search that tolerates naming differences, close to the city only.
+  for (const p of missing()) {
+    try {
+      Object.assign(p, (await findNear(p.name, stop)) || {})
+    } catch (e) {
+      log('error', `Photon: ${p.name}: ${e.message}`)
+    }
   }
 
   const still = missing().map(p => p.name)

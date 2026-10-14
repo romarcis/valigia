@@ -16,6 +16,7 @@
         { "url": "https://routing.openstreetmap.de/*" },
         { "url": "https://www.wikidata.org/*" },
         { "url": "https://nominatim.openstreetmap.org/*" },
+        { "url": "https://photon.komoot.io/*" },
         { "url": "http://localhost:*" },
         { "url": "http://127.0.0.1:*" }
       ]

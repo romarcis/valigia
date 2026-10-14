@@ -152,7 +152,9 @@ A cool navy-and-paper neutral frame that stays quiet so six saturated label inks
 - **Shell Navy** (navy): app bar, primary buttons, headings on paper, active segmented option, route line on the map, text on the ochre ink. Hover deepens toward **Night Navy** (navy-2).
 
 ### Secondary: the stop inks
-Assigned by stop index, cycling: **Vermilion** (ink-vermilion), **Ochre** (ink-ochre, carries navy text, all others carry white), **Ultramarine** (ink-ultramarine), **Bottle Green** (ink-bottle-green), **Rose** (ink-rose), **Teal** (ink-teal). An ink fills the stop's map label, rail chip number, stop header, place pins, the "Scelto" hotel button, the transport icon disc, the timeline rule and the active tab underline. Tints of the active ink (9-16% over sheet) mark the chosen hotel row and empty image wells.
+Assigned by stop index, cycling: **Vermilion** (ink-vermilion), **Ochre** (ink-ochre, carries navy text, all others carry white), **Ultramarine** (ink-ultramarine), **Bottle Green** (ink-bottle-green), **Rose** (ink-rose), **Teal** (ink-teal). An ink fills the stop's map label, rail chip number, stop header, place pins, the hotel's "0" pin, the transport icon disc, the timeline rule and the active tab underline. Tints of the active ink (9-16% over sheet) mark the picked itinerary row, the hotel box and empty image wells.
+
+**Day tones.** The days of a stop are tones of its one ink, never other inks: day 1 is the ink itself, later days mix it with Sheet Grey down to 35% (`dayTone` in `src/util.js`). Text on a tone is white or navy, whichever contrasts more. A day's tone colors its place pins, meal-venue pins, the day swatch beside "Giorno N" and its route on the map, where every day line carries a full-ink edge so light tones stay visible.
 
 ### Neutral
 - **Cool Paper** (paper): page ground behind everything.
@@ -168,7 +170,9 @@ Assigned by stop index, cycling: **Vermilion** (ink-vermilion), **Ochre** (ink-o
 The basemap (OpenFreeMap Positron) is repainted at load: **Map Land** background, **Map Water** fills and rivers, **Map Green** parks, white roads with cool-grey casings, **Map Type** labels on a sheet-colored halo, italic label fonts replaced with upright Noto Sans. Map label glyphs come from the tile server, so they cannot use the app's typefaces.
 
 ### Named Rules
-**The One Ink Per Stop Rule.** A stop's ink is set once as `--ink` / `--on-ink` from the sequence and inherited; components never pick a stop color themselves. Ochre pairs with navy text, every other ink with white.
+**The One Ink Per Stop Rule.** A stop's ink is set once as `--ink` / `--on-ink` from the sequence and inherited; components never pick a stop color themselves, and days of a stop never borrow another stop's ink (they are tones of their own). Ochre pairs with navy text, every other ink with white.
+
+**The Navy Transfer Rule.** Transfer chips between itinerary items live in the shell: Quiet Hover pills with navy text, the chosen mode filled navy, a dashed Field Stroke connector. A single available mode is information, not a pressed choice.
 
 **The Quiet Frame Rule.** Navy, sheet and paper carry the interface; saturated color appears only as a stop ink or a status (warn, danger).
 
@@ -186,9 +190,11 @@ The basemap (OpenFreeMap Positron) is repainted at load: **Map Land** background
 - **Subtitle** (700, 17-18px, 1.2-1.25, Hanken): place, hotel and provider names.
 - **Body** (400, 15px, 1.5): reading text; long summaries cap at 65ch; secondary copy 14px in muted.
 - **Label** (600, 13px): field labels, hints, meta lines, source links. Small caps-style label (700, 11px, 0.08em, uppercase) appears only as the city line inside a map label; tags use 700, 12px, 0.02em.
+- **Pin numerals** (Hanken 800, 13px): the small numbered ovals on the map and in the itinerary. At this size Big Shoulders' "1" reads as an "I", so pins use the reading face; the display face takes over from 17px up (chips, labels, headers).
+- **Wizard questions** (display 800, 32px, sentence case): one question per screen in the new-trip flow. They are sentences, so they stay out of uppercase.
 
 ### Named Rules
-**The Numeral Handle Rule.** Numbers that a user scans (stop index, price, score, day) are set in the display face at 800; the units and qualifiers under them fall back to 12px Hanken in muted.
+**The Numeral Handle Rule.** Numbers that a user scans (stop index, day, visit time) are set in the display face at 800, except pin numerals (see above); the units and qualifiers under them fall back to 12px Hanken in muted.
 
 **The Uppercase Belongs To Places Rule.** Uppercase is reserved for display-face place and pane names, the wordmark, and the map label city line. Body and UI labels stay sentence case.
 
@@ -196,7 +202,7 @@ The basemap (OpenFreeMap Positron) is repainted at load: **Map Land** background
 
 A console: an app bar, then a two-column workspace with a fixed 460px panel on the left (scrolling independently, closed by a 1.5px navy rule) and the map filling the rest at full height. Inside the panel the stop rail sticks to the top, the tabs stick under it, and tab panels pad 20px.
 
-Under 860px the workspace stacks: the map takes a sticky 44dvh band on top, the panel flows below it with a navy top rule, and rail and tabs stop being sticky. Two-column form grids collapse to one; place rows shrink their image column from 140px to 104px.
+Under 860px the workspace stacks: the map takes a sticky 44dvh band on top, the panel flows below it with a navy top rule, and rail and tabs stop being sticky. The map belongs to the trip view only: the new-trip flow and settings take the whole screen. Two-column form grids collapse to one; place rows shrink their image column from 140px to 104px. On touch screens transfer chips, venue and Wikipedia links and the row menu grow to 40px targets.
 
 Spacing runs on a 4px base with working steps of 6, 8, 12, 16, 20 and 24px; list rhythm is 22px between places and 30px between itinerary days. Map controls float 16px from the map edge; fitted bounds keep 72px padding so labels stay in frame.
 
@@ -207,6 +213,7 @@ Flat. Depth is printed: surfaces sit side by side separated by 1.5px rules, and 
 ### Shadow Vocabulary
 - **Printed double rule** (`box-shadow: inset 0 0 0 3px var(--ink), inset 0 0 0 4.5px var(--on-ink)`): map labels and the wordmark; chips use a 2px/3px version, pins 2px/3px.
 - **Stamp offset** (`::after` 1.5px ink outline translated 4px, 4px): only on the active map label.
+- Floating surfaces (place card, combobox lists, context menu, activity log, map popup) separate with a 1.5px navy or ink rule and no shadow. The packing loader veils the app with an opaque paper wash (95%), not a blur.
 
 ### Named Rules
 **The Print Not Light Rule.** No blurred or ambient shadows, no glass or backdrop blur. If something needs separation, give it a rule or an ink fill.
@@ -223,7 +230,7 @@ Two families. Working controls (buttons, fields, segmented controls, notes, imag
 Firm, flat and quick.
 - **Shape:** gently squared (6px), 40px min height, 600 weight, 1.5px border slot.
 - **Primary:** Shell Navy fill, white text; hover Night Navy. Wide variant spans the form at 48px / 16px.
-- **Ink:** fills with the active stop ink (the "Scelto" choice); hover brightens 8%.
+- **Ink:** fills with the active stop ink (retry, re-plan, hotel save); hover brightens 8%.
 - **Quiet:** transparent with a navy 1.5px border and navy text; hover Quiet Hover fill.
 - **On navy:** in the app bar, slate border (#5d6b94) and white text; hover Night Navy.
 - **Danger quiet:** Brick text, underline on hover. **Danger:** Brick fill.
@@ -242,15 +249,36 @@ Firm, flat and quick.
 - **Focus:** Link Blue 2px outline flush to the border, border turns Link Blue. Hover turns the border navy.
 - **Segmented control:** 1.5px navy outline, 1.5px internal dividers, selected option filled navy with white text.
 
+### Search boxes (combobox)
+- **Style:** a field that only accepts a value picked from its list: white list under the field with a 1.5px navy rule, options as name in 700 plus muted detail, the highlighted option filled navy.
+- **Behavior:** search starts 300-400ms after the last keystroke; nothing is highlighted until the user arrows down, so Enter never picks on its own; leaving the field without picking restores the last valid value. Used for the destination (Wikidata, names in the app language), hotels and meal venues (Google Places when the app is built with a key, else OpenStreetMap). Google results carry a "Google Maps" credit in 11px 700 muted.
+
+### New-trip flow
+- One question per screen: what, when, where, who, stops, where you sleep. A six-segment navy progress bar with "Passo N di 6" under it; Back and Next at the bottom, Next as the primary.
+- Interest picks are pills (navy outline, navy fill when on); the length is a stepper with a display numeral; AI destination ideas are white cards that fill navy when chosen.
+
+### Itinerary
+- A day: display "Giorno N" with its tone swatch, the day title, then a timeline on the stop-ink spine.
+- The hotel is place 0: a bed icon in the time column and a "0" pin, at the start ("Si parte dall'hotel") and end ("Rientro in hotel") of every day.
+- Each place row: time, pin numeral in the day tone, name, note, visit time and Wikipedia link, thumbnail, and a row menu button (always visible on touch, on hover or focus with a mouse) that moves it up, down or to another day.
+- Between items, transfer chips (see The Navy Transfer Rule); from the hotel to place 1 they also show the drive in km and minutes.
+- Meals and breaks can take a venue: "Scegli dove mangiare" opens a search box; the venue then shows with a knife-and-fork icon and joins the walk.
+
+### Place card
+Opened from a pin on the map: the place's photo, numeral and name, its day, why it is in the plan and the Wikipedia introduction. A sheet-grey card with a 1.5px ink rule, top right over the map on desktop, a sheet from the bottom on phones; fades in, closes with the X or Esc.
+
+### Settings
+The AI provider in use sits in a card tinted 7% navy over sheet with a 1.5px navy rule and the green "In uso" tag; the others show "Usa questo".
+
 ### Navigation
 - **App bar:** navy band holding the double-ruled pill wordmark (display 800, 28px, uppercase; 22px on phones), the trip switcher (Night Navy select), the new-trip button and settings.
 - **Tabs:** 700 muted labels; selected turns Ink Text with a 4px underline in the stop ink sitting on the navy rule.
 
 ### Stop header (signature)
-A full-width block flooded with the active stop ink: display numeral at left, uppercase headline city, dates and chosen hotel in 600 below, refresh as an ink-outlined circle. Ink changes cross-fade over 0.5s.
+A full-width block flooded with the active stop ink: display numeral at left, uppercase headline city, dates and nights in 600 below (full on-ink, never faded: contrast on vermilion is at the limit), refresh as an ink-outlined circle. Ink changes cross-fade over 0.5s. Under it, once the stop is planned, the hotel box asks where the traveller sleeps.
 
 ### Luggage label marker (signature)
-The map's stop marker: an ink oval with the printed double rule, a two-digit display numeral (22px) over the uppercase city line. Hover tilts it -2deg; the active label tilts -5deg, rises above the others and shows its stamp offset, over 0.45s on the out-expo curve. Place pins are smaller numbered ovals in the active stop's ink.
+The map's stop marker in the overview: an ink oval with the printed double rule, a two-digit display numeral (22px) over the uppercase city line; clicking it opens the stop. Hover tilts it -2deg; the active label tilts -5deg, rises above the others and shows its stamp offset, over 0.45s on the out-expo curve. The tilt lives on an inner element, because the map positions the marker with its own transform. Inside a stop the labels give way to its pins: smaller numbered ovals in the day tones, the hotel's "0" and knife-and-fork venue pins.
 
 ## Do's and Don'ts
 

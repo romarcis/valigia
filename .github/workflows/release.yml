@@ -25,6 +25,8 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # compiled into the app for hotel/restaurant search (src-tauri/src/places.rs); without it the app uses OpenStreetMap only
+          GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Valigia ${{ github.ref_name }}

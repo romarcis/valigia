@@ -9,7 +9,7 @@ related_targets: []
 
 Scope: whole app UI (Tauri webview, Windows + Android). Mode: Operate.
 Audience/job: plan a multi-stop trip and trust it enough to book; review it on a phone.
-Proof/content: real places (Wikipedia images/text), hotels with sourced rating/price, transport options with sourced times. No invented data, ever.
+Proof/content: real places (Wikipedia images/text), the traveller's own hotel per stop, transport options with sourced times. No invented data, ever.
 Constraints: map-first trip view; no chatbot-first flow; no brochure effect.
 
 ## Direction contract
@@ -20,7 +20,7 @@ OWN-WORLD: Lithographic flat inks. Shell is deep navy #16213f; working ground co
 
 STORY: The user sees the whole route at a glance, opens one stop, sees what to see, where to sleep, how to move, and knows every number has a source.
 
-FIRST VIEWPORT: Desktop: left 420px persistent panel (stop rail of numbered label chips on top, then tabs Itinerario / Luoghi / Hotel / Spostamenti for the active stop); right the map full-height with route line and label markers. Mobile: map top 45%, bottom sheet with the same panel. Primary action "Nuovo viaggio" in navy header.
+FIRST VIEWPORT: Desktop: left 420px persistent panel (stop rail of numbered label chips on top, then tabs Itinerario / Luoghi / Spostamenti for the active stop); right the map full-height with route line and label markers. Mobile: map top 45%, bottom sheet with the same panel. Primary action "Nuovo viaggio" in navy header.
 
 FORM: Hotel luggage labels, my list position 3; seed key 5c44399e. Signature move: stop markers are luggage labels; selecting a stop "stamps" its label (slight rotation + offset print) and tints the panel header in that stop's ink. Raises: persistent panels (console); sequence numbers as handles (Saville); distinct printed state marks (reference setting).
 

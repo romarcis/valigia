@@ -15,6 +15,17 @@ Nessun server: ogni utente collega la propria AI dalle Impostazioni.
 
 Gli abbonamenti Claude Pro/Max e ChatGPT Plus non si possono usare in app di terze parti.
 
+## Hotel e ristoranti: Google Places (facoltativo)
+
+Hotel, B&B e ristoranti si cercano su OpenStreetMap; se l'app è compilata con una chiave Google, prima su Google Places (trova anche le piccole strutture che OpenStreetMap non conosce).
+La chiave non sta nel repository né nell'interfaccia: viene compilata nella parte Rust da `GOOGLE_PLACES_KEY` e solo Rust chiama Google.
+Si può comunque estrarre dall'eseguibile: in Google Cloud limitala alla sola **Places API (New)** e metti un tetto giornaliero alle richieste.
+
+- Sviluppo: variabile d'ambiente utente `GOOGLE_PLACES_KEY`, poi riavvia `npx tauri dev`.
+- Release: secret `GOOGLE_PLACES_KEY` nel repository GitHub (Settings → Secrets → Actions).
+
+Nota: le regole di Google Places chiedono di mostrare i risultati su una mappa Google e di non salvarne i dati (salvo l'ID del luogo); Valigia li mette sulla mappa OpenStreetMap e salva la posizione.
+
 ## Sviluppo
 
 ```sh

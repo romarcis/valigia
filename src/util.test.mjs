@@ -1,6 +1,6 @@
 // node src/util.test.mjs
 import assert from 'node:assert/strict'
-import { addDays, stopOffsets, walkMinutes, cleanDays, moveItem, renumber, joinLegs, routeUpTo, placeTags } from './util.js'
+import { addDays, stopOffsets, walkMinutes, cleanDays, moveItem, renumber, joinLegs, routeUpTo, placeTags, dayNumbers, removeItem, insertBreak, dropUnlocated, sameName, dayTone, contrast } from './util.js'
 
 assert.equal(addDays('2026-12-30', 3), '2027-01-02')
 assert.deepEqual(stopOffsets({ stops: [{ nights: 2 }, { nights: 3 }, { nights: 1 }] }), [0, 2, 5])
@@ -74,4 +74,64 @@ console.log('ok 2')
   ] }
   assert.deepEqual(placeTags(stop), [{ day: 0, n: 1 }, { day: 0, n: 2 }, { day: 1, n: 1 }]) // day 2 restarts at 1; D unvisited
   console.log('ok 6')
+}
+
+{
+  const P = [{ name: 'A', lat: 1 }, { name: 'X', lat: null }, { name: 'B', lat: 2 }, { name: 'C', lat: 3 }] // C unvisited
+  const days = [{ items: [{ placeIdx: 1, transfer: null }, { placeIdx: 0, transfer: { car_min: 4 } }, { placeIdx: null, place: 'Pranzo' }, { placeIdx: 2 }] }]
+  const r = dropUnlocated(P, days)
+  assert.deepEqual(r.dropped, ['X'])
+  assert.deepEqual(r.places.map(p => p.name), ['A', 'B', 'C'])
+  assert.deepEqual(r.days[0].items.map(it => it.placeIdx), [0, null, 1])
+  assert.equal(r.days[0].items[0].transfer, null) // A became first of the day
+  assert.equal(dropUnlocated(r.places, r.days).places, r.places) // nothing missing: unchanged
+  console.log('ok 7')
+}
+
+assert.ok(sameName('Chiesa di San Michele Arcangelo', 'Chiesa di San Michele'))
+assert.ok(!sameName('Chiesa di San Giovanni Battista', 'Chiesa dei Santi Pietro e Paolo Apostoli'))
+assert.ok(!sameName('Palazzo Francesconi', 'Palazzo Ducale'))
+assert.ok(sameName('Basilica di Santa Croce', 'Santa Croce'))
+assert.ok(sameName('Real Alcázar', 'Real Alcazar de Sevilla')) // accents ignored
+console.log('ok 8')
+
+{
+  const ink = { bg: '#c8402a', fg: '#ffffff' }
+  assert.equal(dayTone(ink, 0, 3), ink) // day 1 is the stop's ink
+  const d2 = dayTone(ink, 1, 2), d3 = dayTone(ink, 2, 3)
+  assert.notEqual(d2.bg, ink.bg)
+  assert.ok(contrast(d2.bg, d2.fg) >= 3 && contrast(d3.bg, d3.fg) >= 3, `${d2.bg} ${d3.bg}`) // pin numbers stay readable
+  assert.ok(contrast(d3.bg, '#eef0f2') < contrast(d2.bg, '#eef0f2')) // later days are lighter
+  console.log('ok 9')
+}
+
+{
+  const stop = { places: ['A', 'B'].map(name => ({ name })), days: [
+    { items: [{ placeIdx: 0 }, { placeIdx: null, place: 'Pranzo', venue: { name: 'Casa Morales' } }, { placeIdx: null, place: 'Pausa' }, { placeIdx: 1 }] },
+  ] }
+  const r = dayNumbers(stop)
+  assert.deepEqual(r.places, [{ day: 0, n: 1 }, { day: 0, n: 3 }]) // the venue takes 2, so B follows it
+  assert.deepEqual(r.venues, { '0:1': { day: 0, n: 2 } }) // a break without a venue takes no number
+  console.log('ok 10')
+}
+
+{
+  const days = [{ route: {}, items: [{ place: 'A' }, { place: 'Caffè', transfer: { car_min: 2 } }, { place: 'B', transfer: { car_min: 3 }, go: 'car' }] }, { route: {}, items: [{ place: 'C' }] }]
+  const r = removeItem(days, { d: 0, i: 1 })
+  assert.deepEqual(r[0].items.map(x => x.place), ['A', 'B'])
+  assert.equal(r[0].items[1].transfer, null) // B now comes from A: the old estimate is gone
+  assert.equal(r[0].items[1].go, undefined)
+  assert.equal(r[0].route, undefined)
+  assert.ok(r[1].route) // other days untouched
+  console.log('ok 11')
+}
+
+{
+  const days = [{ route: {}, items: [{ time: '09:30', place: 'A' }, { time: '12:00', place: 'B' }] }]
+  let r = insertBreak(days, { d: 0, i: 0 }, 'Pausa caffè')
+  assert.deepEqual(r[0].items.map(x => x.place + x.time), ['A09:30', 'Pausa caffè10:45', 'B12:00']) // halfway, on 5 minutes
+  assert.ok(r[0].route) // a break without a venue does not change the walk
+  r = insertBreak(days, { d: 0, i: 1 }, 'Cena')
+  assert.equal(r[0].items[2].time, '13:00') // after the last item: one hour later
+  console.log('ok 12')
 }
