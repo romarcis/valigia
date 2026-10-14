@@ -27,7 +27,7 @@ async function wikidataCoords(lang, titles) {
 }
 
 // OpenStreetMap search, bounded to ~25 km around the city so namesakes elsewhere don't match.
-async function nominatim(name, stop) {
+export async function nominatim(name, stop) {
   const q = new URLSearchParams({ q: `${name}, ${stop.city}`, format: 'jsonv2', limit: '1' })
   if (stop.lat != null) {
     const d = 0.25
@@ -75,10 +75,4 @@ export async function locatePlaces(places, stop) {
   const still = missing().map(p => p.name)
   log(still.length ? 'error' : 'ok', `${stop.city}: posizione trovata per ${places.length - still.length}/${places.length} luoghi${still.length ? ` (mancano: ${still.join(', ')})` : ''}`)
   return out
-}
-
-// Free-text place -> {lat, lng} via OpenStreetMap (homes, airports). null when nothing matches.
-export async function geocode(q) {
-  const [hit] = await getJson(`https://nominatim.openstreetmap.org/search?${new URLSearchParams({ q, format: 'jsonv2', limit: '1' })}`, { headers: { 'User-Agent': 'Valigia/0.1 (trip planner)' } })
-  return hit ? { lat: Number(hit.lat), lng: Number(hit.lon) } : null
 }

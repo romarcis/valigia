@@ -1,21 +1,10 @@
 // node src/util.test.mjs
 import assert from 'node:assert/strict'
-import { addDays, stopOffsets, rankHotels, walkMinutes, cleanDays, moveItem } from './util.js'
+import { addDays, stopOffsets, walkMinutes, cleanDays, moveItem, renumber, joinLegs, routeUpTo, placeTags } from './util.js'
 
 assert.equal(addDays('2026-12-30', 3), '2027-01-02')
 assert.deepEqual(stopOffsets({ stops: [{ nights: 2 }, { nights: 3 }, { nights: 1 }] }), [0, 2, 5])
 
-const hotels = [
-  { name: 'A', price_per_night_eur: 200, rating: 9.0, rating_scale: 10 },
-  { name: 'B', price_per_night_eur: 80, rating: 4.0, rating_scale: 5 },
-  { name: 'C', price_per_night_eur: null, rating: null, rating_scale: null },
-  { name: 'D', price_per_night_eur: 60, rating: null, rating_scale: null },
-]
-const names = by => rankHotels(hotels, by).map(h => h.name).join('')
-assert.equal(names('price'), 'DBAC')
-assert.equal(names('rating'), 'ABCD')
-assert.equal(names('value'), 'BACD')
-assert.equal(rankHotels(hotels, 'price')[1].score10, 8)
 console.log('ok')
 
 // walkMinutes: Duomo di Milano -> Castello Sforzesco is ~1.0 km straight line
@@ -59,13 +48,30 @@ console.log('ok 2')
 }
 
 {
-  const { readFileSync } = await import('node:fs')
-  const { searchAirports, nearestAirports } = await import('./airports.js')
-  const list = JSON.parse(readFileSync(new URL('./data/airports.json', import.meta.url))).map(([iata, name, city, cc, lat, lng, size]) => ({ iata, name, city, cc, lat, lng, size }))
-  const codes = q => searchAirports(list, q).map(a => a.iata)
-  assert.equal(codes('MXP')[0], 'MXP') // exact code first
-  assert.ok(codes('milano').includes('MXP') && codes('milano').includes('LIN'), codes('milano').join()) // Italian name finds "Milan"
-  assert.deepEqual(nearestAirports(list, { lat: 41.0064, lng: 28.9759 }, 2).map(a => a.iata).sort(), ['IST', 'SAW']) // Istanbul centre
-  assert.equal(nearestAirports(list, { lat: 37.3886, lng: -5.9823 })[0].iata, 'SVQ') // Seville
+  const P = ['A', 'B', 'C', 'D'].map(name => ({ name }))
+  const days = [{ items: [{ placeIdx: 2 }, { placeIdx: null, place: 'Pranzo' }, { placeIdx: 0 }] }, { items: [{ place: 'D' }] }] // D: old plan, by name
+  const r = renumber(P, days)
+  assert.deepEqual(r.places.map(p => p.name), ['C', 'A', 'D', 'B']) // itinerary order, unvisited B last
+  assert.deepEqual(r.days.map(d => d.items.map(it => it.placeIdx)), [[0, null, 1], [2]])
   console.log('ok 4')
+}
+
+{
+  const step = (...pts) => ({ geometry: { coordinates: pts } })
+  // hotel H -> A -> B -> H, each leg made of steps
+  const r = joinLegs([{ steps: [step([0, 0], [1, 0]), step([1, 0], [1, 1])] }, { steps: [step([1, 1], [2, 1])] }, { steps: [step([2, 1], [0, 0])] }])
+  assert.deepEqual(r.cuts, [3, 5, 7])
+  assert.deepEqual(routeUpTo(r, 0), []) // the start: no line yet
+  assert.deepEqual(routeUpTo(r, 1).at(-1), [1, 1]) // up to A
+  assert.deepEqual(routeUpTo(r, 2).at(-1), [2, 1]) // up to B, not back to the hotel
+  console.log('ok 5')
+}
+
+{
+  const stop = { places: ['A', 'B', 'C', 'D'].map(name => ({ name })), days: [
+    { items: [{ placeIdx: 0 }, { placeIdx: null, place: 'Pranzo' }, { placeIdx: 1 }] },
+    { items: [{ place: 'C' }] }, // old plan: by name
+  ] }
+  assert.deepEqual(placeTags(stop), [{ day: 0, n: 1 }, { day: 0, n: 2 }, { day: 1, n: 1 }]) // day 2 restarts at 1; D unvisited
+  console.log('ok 6')
 }

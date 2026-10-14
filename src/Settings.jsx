@@ -32,7 +32,6 @@ export default function Settings({ t, settings, setSettings, onDone }) {
   const [err, setErr] = useState(null)
   const [gem, setGem] = useState(settings.geminiKey || '')
   const [ds, setDs] = useState(settings.deepseekKey || '')
-  const [sp, setSp] = useState(settings.serpapiKey || '')
   const [cu, setCu] = useState({ url: settings.customUrl || 'http://localhost:20128/v1', key: settings.customKey || '', model: settings.customModel || '' })
   const set = patch => setSettings(s => ({ ...s, ...patch }))
 
@@ -148,23 +147,6 @@ export default function Settings({ t, settings, setSettings, onDone }) {
           <button className="btn btn-quiet">{t.save}</button>
         </form>
       </Provider>
-
-      <section className="provider is-on" aria-labelledby="p-flights">
-        <header className="provider-head"><h2 id="p-flights">{t.flTitle}</h2></header>
-        <p className="muted">{t.flBody}</p>
-        <form className="stack" onSubmit={e => { e.preventDefault(); set({ serpapiKey: sp.trim() || null }) }}>
-          <button type="button" className="link" onClick={() => openExternal('https://serpapi.com/manage-api-key')}>
-            {t.gmGetKey} <ArrowSquareOutIcon size={14} aria-hidden />
-          </button>
-          <label className="field">
-            <span>{t.flKey}</span>
-            <input type="password" value={sp} onChange={e => setSp(e.target.value)} autoComplete="off" spellCheck="false" />
-          </label>
-          <button className="btn btn-quiet" disabled={sp.trim() === (settings.serpapiKey || '')}>
-            {sp && sp === settings.serpapiKey ? t.saved : t.save}
-          </button>
-        </form>
-      </section>
 
       {isConnected(settings) && <button className="btn btn-primary btn-wide" onClick={onDone}>{t.newTrip}</button>}
     </div>

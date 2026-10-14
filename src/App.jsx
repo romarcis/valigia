@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GearSixIcon, PlusIcon, MapTrifoldIcon, ListBulletsIcon } from '@phosphor-icons/react'
-import MapView from './MapView.jsx'
+import MapView, { dayInk } from './MapView.jsx'
 import Settings, { isConnected } from './Settings.jsx'
 import NewTrip from './NewTrip.jsx'
 import StopPanel from './StopPanel.jsx'
 import { STRINGS, errorText } from './i18n.js'
-import { planStop, findHotels, findTransport } from './planner.js'
-import { moveItem } from './util.js'
+import { planStop, findTransport } from './planner.js'
+import { moveItem, renumber, routeUpTo, placeTags } from './util.js'
 import { log } from './net.js'
 import LogPanel, { useLog } from './LogPanel.jsx'
 import PackingLoader from './PackingLoader.jsx'
+import PlaceCard from './PlaceCard.jsx'
 import { walkRoute } from './routing.js'
-import { locatePlaces } from './geo.js'
-import FlightPicker from './FlightPicker.jsx'
-import { prepareTravel, travelLines } from './travel.js'
+import { locatePlaces, nominatim } from './geo.js'
+import { ring } from './bell.js'
 
 // Lithographic label inks, one per stop in travel order.
 export const INKS = [
@@ -24,6 +24,12 @@ export const INKS = [
   { bg: '#b8506f', fg: '#ffffff' },
   { bg: '#1d6f78', fg: '#ffffff' },
 ]
+
+// The points a day's walk goes through: the hotel (when on the map), the located places in order, the hotel again.
+function dayPoints(stop, d) {
+  const pts = d.items.map(it => stop.places[it.placeIdx ?? stop.places.findIndex(p => p.name === it.place)]).filter(p => p?.lat != null)
+  return stop.hotel?.lat != null && pts.length ? [stop.hotel, ...pts, stop.hotel] : pts
+}
 
 function usePersist(key, init) {
   const [v, setV] = useState(() => {
@@ -47,12 +53,14 @@ export default function App() {
   const [tab, setTab] = useState('days')
   const [overview, setOverview] = useState(true)
   const [picked, setPicked] = useState(null) // index into the active stop's places
+  const [card, setCard] = useState(false) // the picked place's card, opened from the map
   const [busy, setBusy] = useState({}) // `${stopId}:${job}` -> true
   const [errors, setErrors] = useState({}) // `${stopId}:${job}` -> message
   const [showLog, setShowLog] = useState(false)
   const [packing, setPacking] = useState(null) // { city, step, total } while stops are being planned
-  const [leg, setLeg] = useState(null) // { dir: 'out'|'in', focus: 'dep'|'arr'|null } when a journey stop is open
-  const [flightDraft, setFlightDraft] = useState(null) // { draft, only?, tripId? } while choosing flights
+  // The suitcase is packed: ring the desk bell when the loader closes.
+  const wasPacking = useRef(false)
+  useEffect(() => { if (wasPacking.current && !packing) ring(); wasPacking.current = !!packing }, [packing])
   const logEntries = useLog()
   const logErrors = logEntries.filter(e => e.level === 'error').length
 
@@ -62,8 +70,6 @@ export default function App() {
 
   useEffect(() => { document.documentElement.lang = settings.lang }, [settings.lang])
   useEffect(() => { if (trip && active >= trip.stops.length) setActive(0) }, [trip, active])
-
-  const updateTrip = useCallback((tripId, patch) => setTrips(ts => ts.map(tr => (tr.id === tripId ? { ...tr, ...patch } : tr))), [setTrips])
 
   const updateStop = useCallback((tripId, stopId, patch) => {
     setTrips(ts => ts.map(tr => (tr.id !== tripId ? tr : { ...tr, stops: tr.stops.map(s => (s.id === stopId ? { ...s, ...patch } : s)) })))
@@ -76,10 +82,14 @@ export default function App() {
     setBusy(b => ({ ...b, [k]: true }))
     setErrors(e => ({ ...e, [k]: null }))
     const t0 = Date.now()
-    log('info', `${s.city}: inizio ${{ plan: 'pianificazione', hotels: 'ricerca hotel', moves: 'ricerca spostamenti' }[job]}`)
+    log('info', `${s.city}: inizio ${{ plan: 'pianificazione', moves: 'ricerca spostamenti' }[job]}`)
     try {
-      if (job === 'plan') updateStop(tr.id, s.id, await planStop(settings, tr, idx))
-      if (job === 'hotels') updateStop(tr.id, s.id, { hotels: await findHotels(settings, tr, idx) })
+      if (job === 'plan') {
+        const planned = await planStop(settings, tr, idx)
+        const h = planned.hotel
+        if (h?.name && h.lat == null) planned.hotel = { name: h.name, ...(await nominatim(h.name, planned).catch(() => null)) }
+        updateStop(tr.id, s.id, planned)
+      }
       if (job === 'moves') updateStop(tr.id, s.id, { moves: await findTransport(settings, tr, idx) })
       log('ok', `${s.city}: completato in ${Math.round((Date.now() - t0) / 1000)}s`)
     } catch (e) {
@@ -90,29 +100,8 @@ export default function App() {
     }
   }, [settings, t, updateStop])
 
-  // From the new-trip form: flights are chosen first, then the stops are planned around them.
-  const createTrip = draft => {
-    const tv = draft.travel
-    setSettings(s => ({ ...s, homeMode: tv.mode, ...(tv.airport ? { homeAirport: tv.airport } : { homePlace: { name: tv.from, ...tv.home } }) }))
-    if (draft.travel.mode === 'flight') { setFlightDraft({ draft }); setView('flights'); return }
-    startTrip(draft)
-  }
-
-  const flightsChosen = fl => {
-    const { draft, only, tripId } = flightDraft
-    setFlightDraft(null)
-    if (tripId) {
-      const tv = trips.find(x => x.id === tripId).travel
-      updateTrip(tripId, { travel: { ...tv, [only]: fl[only] } })
-      setView('trip')
-      return
-    }
-    startTrip({ ...draft, travel: { ...draft.travel, out: fl?.out || null, in: fl?.in || null } })
-  }
-
-  const startTrip = async draft => {
+  const createTrip = async draft => {
     const tr = { ...draft, id: newId(), lang: settings.lang, stops: draft.stops.map(s => ({ ...s, id: newId() })) }
-    setLeg(null)
     setTrips(ts => [tr, ...ts])
     setCurrentId(tr.id)
     setActive(0)
@@ -133,14 +122,32 @@ export default function App() {
     setActive(0)
   }
 
-  const chooseHotel = name => trip && stop && updateStop(trip.id, stop.id, { chosenHotel: stop.chosenHotel === name ? null : name })
+  // The traveller's own hotel: located on the map, then every day's walk starts and ends there.
+  // Returns false when the name was saved but OpenStreetMap could not place it.
+  const saveHotel = async name => {
+    const tr = trip, s = stop
+    const days = s.days?.map(({ route, ...d }) => d) // drop routes so they are recomputed from the hotel
+    if (!name) return updateStop(tr.id, s.id, { hotel: null, days })
+    let at = null
+    try { at = await nominatim(name, s) } catch (e) { log('error', `OpenStreetMap: ${name}: ${e.message}`) }
+    log(at ? 'ok' : 'error', `${s.city}: hotel «${name}» ${at ? 'trovato sulla mappa' : 'non trovato sulla mappa'}`)
+    updateStop(tr.id, s.id, { hotel: { name, ...at }, days })
+    return !!at
+  }
 
-  const selectStop = useCallback(i => { setActive(i); setOverview(false); setPicked(null); setLeg(null) }, [])
-  const openLeg = useCallback((dir, focus) => { setLeg({ dir, focus }); setOverview(false); setPicked(null) }, [])
-  // From the map: highlight the place and make sure a tab that lists it is showing.
-  const pickFromMap = useCallback(i => { setPicked(i); setTab(tb => (tb === 'days' || tb === 'places' ? tb : 'days')) }, [])
-  const pickFromList = useCallback(i => { setPicked(p => (p === i ? null : i)); setOverview(false) }, [])
-  const places = useMemo(() => (overview || leg || !stop?.places ? [] : stop.places), [overview, leg, stop])
+  const closeCard = useCallback(() => setCard(false), [])
+  const selectStop = useCallback(i => { setActive(i); setOverview(false); setPicked(null) }, [])
+  // From the map: highlight the place and show the tab that lists it (Places only lists what the itinerary skips).
+  const pickFromMap = useCallback(i => {
+    setPicked(i)
+    setCard(true)
+    const inDays = stop?.days?.some(d => d.items.some(it => (it.placeIdx ?? stop.places.findIndex(p => p.name === it.place)) === i))
+    setTab(inDays ? 'days' : 'places')
+  }, [stop])
+  const pickFromList = useCallback(i => { setPicked(p => (p === i ? null : i)); setCard(false); setOverview(false) }, [])
+  const places = useMemo(() => (overview || !stop?.places ? [] : stop.places), [overview, stop])
+  // Day and number of each place: pins take that day's colour and its number within the day.
+  const tags = useMemo(() => (stop?.places ? placeTags(stop) : []), [stop])
 
   // For the stop on screen: first locate places Wikipedia left without coordinates (once),
   // then compute each day's street walking route (once, stored with the day).
@@ -156,13 +163,12 @@ export default function App() {
       })()
       return () => { cancelled = true }
     }
-    if (stop.days.every(d => d.route)) return
+    if (stop.days.every(d => d.route?.cuts)) return // routes from older versions lack cuts: recompute them
     ;(async () => {
       const days = []
       for (const d of stop.days) {
-        if (d.route) { days.push(d); continue }
-        const pts = d.items.map(it => stop.places[it.placeIdx ?? stop.places.findIndex(p => p.name === it.place)]).filter(p => p?.lat != null)
-        days.push({ ...d, route: await walkRoute(pts) })
+        if (d.route?.cuts) { days.push(d); continue }
+        days.push({ ...d, route: await walkRoute(dayPoints(stop, d)) })
         if (cancelled) return
       }
       updateStop(trip.id, stop.id, { days })
@@ -170,20 +176,14 @@ export default function App() {
     return () => { cancelled = true }
   }, [trip, stop, updateStop])
 
-  // Journey there and back: airport positions or the driving route, computed once the stops are located.
-  const travelJob = useRef(null)
-  useEffect(() => {
-    if (!trip?.travel || travelJob.current === trip.id) return
-    travelJob.current = trip.id
-    prepareTravel(trip).then(tv => { if (tv) updateTrip(trip.id, { travel: tv }) }).finally(() => { travelJob.current = null })
-  }, [trip, updateTrip])
-  const legs = useMemo(() => travelLines(trip?.travel).map(l => ({ ...l, hot: leg?.dir === l.id })), [trip, leg])
-
-  // The day that holds the picked place is drawn on top.
-  const dayRoutes = useMemo(() => (overview || leg || !stop?.days ? [] : stop.days.map((d, i) => ({
-    day: i, coords: d.route?.coords || [],
-    hot: picked != null && d.items.some(it => (it.placeIdx ?? stop.places.findIndex(p => p.name === it.place)) === picked),
-  }))), [overview, leg, stop, picked])
+  // The day that holds the picked place is drawn on top up to that place; the rest of it is dimmed like the other days.
+  const dayRoutes = useMemo(() => (overview || !stop?.days ? [] : stop.days.flatMap((d, i) => {
+    const w = picked == null ? -1 : dayPoints(stop, d).indexOf(stop.places[picked])
+    const coords = d.route?.coords || []
+    if (w < 0 || !d.route?.cuts) return [{ day: i, hot: w >= 0, coords }]
+    const done = routeUpTo(d.route, w)
+    return [{ day: i, hot: true, coords: done }, { day: i, hot: false, coords: coords.slice(Math.max(0, done.length - 1)) }]
+  })), [overview, stop, picked])
 
   return (
     <div className="app" style={stop && view === 'trip' ? { '--ink': INKS[active % INKS.length].bg, '--on-ink': INKS[active % INKS.length].fg } : undefined}>
@@ -211,11 +211,6 @@ export default function App() {
       <main className="workspace">
         <aside className="panel">
           {view === 'settings' && <Settings t={t} settings={settings} setSettings={setSettings} onDone={() => setView('new')} />}
-          {view === 'flights' && flightDraft && (
-            <FlightPicker t={t} settings={settings} draft={flightDraft.draft} only={flightDraft.only}
-              onDone={flightsChosen}
-              onSkip={() => (flightDraft.tripId ? (setFlightDraft(null), setView('trip')) : flightsChosen(null))} />
-          )}
           {view === 'new' && <NewTrip t={t} settings={settings} onCreate={createTrip} onCancel={trips.length ? () => setView('trip') : null} />}
           {view === 'trip' && !trip && (
             <section className="empty">
@@ -227,22 +222,28 @@ export default function App() {
           {view === 'trip' && trip && (
             <StopPanel
               t={t} trip={trip} active={active} onSelect={selectStop} inks={INKS}
-              leg={leg} onLeg={openLeg} onChangeFlight={dir => { setFlightDraft({ draft: trip, only: dir, tripId: trip.id }); setView('flights') }}
               tab={tab} setTab={setTab} picked={picked} onPick={pickFromList}
-              onMove={(from, to) => updateStop(trip.id, stop.id, { days: moveItem(stop.days, from, to) })} busy={busy} errors={errors} settings={settings}
+              onMove={(from, to) => {
+                const next = renumber(stop.places, moveItem(stop.days, from, to))
+                if (picked != null) setPicked(next.places.indexOf(stop.places[picked])) // the highlight follows its place
+                updateStop(trip.id, stop.id, next)
+              }} busy={busy} errors={errors} settings={settings}
               run={async job => {
                 if (job !== 'plan') return run(trip, active, job)
                 setPacking({ city: stop.city, step: 1, total: 1 })
                 await run(trip, active, job)
                 setPacking(null)
-              }} onChooseHotel={chooseHotel} onDelete={() => deleteTrip(trip.id)}
+              }} onSaveHotel={saveHotel} onDelete={() => deleteTrip(trip.id)}
             />
           )}
         </aside>
 
         <section className="map-wrap">
+          {card && !overview && stop?.places?.[picked] && (
+            <PlaceCard t={t} place={stop.places[picked]} tag={tags[picked]} ink={tags[picked] ? dayInk(INKS, active, tags[picked].day) : INKS[active % INKS.length]} onClose={closeCard} />
+          )}
           {showLog && <LogPanel t={t} entries={logEntries} onClose={() => setShowLog(false)} />}
-          <MapView stops={trip?.stops || []} active={active} places={places} routes={dayRoutes} legs={legs} legFocus={!!leg} inks={INKS} overview={overview} selected={overview ? null : picked} onPick={pickFromMap} />
+          <MapView stops={trip?.stops || []} active={active} places={places} tags={tags} hotel={overview ? null : stop?.hotel} routes={dayRoutes} inks={INKS} overview={overview} selected={overview ? null : picked} onPick={pickFromMap} />
           {trip && (
             <button className="map-overview" aria-pressed={overview} onClick={() => setOverview(o => !o)}>
               <MapTrifoldIcon size={18} aria-hidden /> {trip.title}

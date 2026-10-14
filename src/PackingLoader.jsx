@@ -76,6 +76,7 @@ export default function PackingLoader({ t, city, step, total }) {
 
       <p className="pk-title">{t.packing}</p>
       {city && <p className="pk-step">{total > 1 ? t.packingStep(city, step, total) : city}</p>}
+      <p className="pk-wait">{t.packingWait}</p>
     </div>
   )
 }

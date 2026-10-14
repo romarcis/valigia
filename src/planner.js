@@ -1,32 +1,15 @@
 import { ask, parseJson } from './ai.js'
 import { wikiLookup } from './wiki.js'
 import { log } from './net.js'
-import { addDays, stopOffsets, cleanDays } from './util.js'
+import { addDays, stopOffsets, cleanDays, renumber } from './util.js'
 
 const LANG_NAME = { it: 'Italian', en: 'English' }
 
 const system = lang => `You are a meticulous travel planner. Write every human-readable string in ${LANG_NAME[lang]}.
 Reply with ONE JSON object only, no prose, no markdown fences. Never invent ratings, prices or review counts: if you cannot find a value, use null.`
 
-// What the AI must know about how the traveller reaches the first stop and leaves the last one.
-function journeyNote(trip, idx) {
-  const tv = trip.travel
-  if (!tv) return ''
-  const lines = []
-  if (idx === 0) {
-    const f = tv.out
-    if (tv.mode === 'flight' && f) lines.push(`Arrival: flight landing at ${f.legs.at(-1).to.name} (${f.legs.at(-1).to.id}) at ${f.legs.at(-1).to.time} on day 1. Start day 1 with the transfer from that airport and the check-in; plan nothing before the landing time.`)
-    else if (tv.mode !== 'flight') lines.push(`Arrival: by ${tv.mode === 'moto' ? 'motorbike' : 'car'} from ${tv.from} on day 1${tv.out?.min ? ` after about ${Math.round(tv.out.min / 60)} hours of driving` : ''}: keep day 1 light and include parking near the hotel.`)
-  }
-  if (idx === trip.stops.length - 1) {
-    const f = tv.in
-    if (tv.mode === 'flight' && f) lines.push(`Departure: return flight from ${f.legs[0].from.name} (${f.legs[0].from.id}) at ${f.legs[0].from.time} on ${f.date}.`)
-  }
-  return lines.length ? lines.join('\n') + '\n' : ''
-}
-
 const tripBrief = t =>
-  `Travellers: ${t.travelers}. Budget per night for lodging: ${t.budget ? `${t.budget} EUR` : 'not set'}. Pace: ${t.pace}. Interests: ${t.interests || 'general sightseeing'}.`
+  `Travellers: ${t.travelers}. Pace: ${t.pace}. Interests: ${t.interests || 'general sightseeing'}.`
 
 export async function suggestStops(settings, { region, days, lang, pace, interests }) {
   const { text } = await ask(settings, {
@@ -37,13 +20,23 @@ Return {"stops":[{"city":string,"country":string,"nights":integer>=1}]} in trave
   return parseJson(text).stops.map(s => ({ city: s.city, country: s.country, nights: Math.max(1, s.nights | 0) }))
 }
 
+// For travellers who do not know where to go yet: a few destinations that fit their interests and season.
+export async function suggestDestinations(settings, { interests, month, nights, lang }) {
+  const { text } = await ask(settings, {
+    system: system(lang),
+    prompt: `Suggest 4 varied destinations (a region, island or city) for a ${nights}-night trip starting in ${month}. Interests: ${interests || 'general'}. They must suit that season.
+Return {"ideas":[{"name":string,"country":string,"why":string (one short sentence)}]}.`,
+  })
+  return parseJson(text).ideas.slice(0, 4)
+}
+
 export async function planStop(settings, trip, idx) {
   const stop = trip.stops[idx]
   const from = addDays(trip.startDate, stopOffsets(trip)[idx])
   const lang = trip.lang
   const { text } = await ask(settings, {
     system: system(lang),
-    prompt: `${journeyNote(trip, idx)}Trip stop ${idx + 1} of ${trip.stops.length}: ${stop.city}, ${stop.country}. ${stop.nights} night(s), arriving ${from}.
+    prompt: `Trip stop ${idx + 1} of ${trip.stops.length}: ${stop.city}, ${stop.country}. ${stop.nights} night(s), arriving ${from}.
 Previous stop: ${trip.stops[idx - 1]?.city || 'none (trip start)'}. Next stop: ${trip.stops[idx + 1]?.city || 'none (trip end)'}.
 ${tripBrief(trip)}
 Return:
@@ -55,7 +48,8 @@ Return:
  (exactly ${stop.nights} days)}
 Rules:
 - "places" are sights only: never airports, stations, hotels or meals.
-- Day 1 starts with the arrival (${idx === 0 ? 'airport or station' : `coming from ${trip.stops[idx - 1].city}`}) and check-in. EVERY FOLLOWING DAY STARTS FROM THE HOTEL: never put the airport or station on day 2 or later${idx < trip.stops.length - 1 ? `, except the last day may end with the departure to ${trip.stops[idx + 1].city}` : ''}.
+- The travellers are already in ${stop.city}: plan only what they do there. Every day starts from and ends at their hotel${stop.hotel?.name ? ` (${stop.hotel.name})` : ''}, which the app shows on its own.
+- Items are sights from "places" and meals or breaks only: NEVER an item for airports, stations, arrivals, departures, check-in, check-out or any hotel. Never name or suggest a hotel.
 - Every place appears in AT MOST ONE day. Never repeat a place on another day; spread the places across the days.
 - Order each day's items so consecutive places are close together.
 - "transfer" is how to get from the PREVIOUS item of the same day to this one: null on the first item of each day. Give your best estimate for metro, tram and bus (with the line name) only where that mode really serves the route, otherwise null; car_min is driving time. Walking time is computed by the app.`,
@@ -78,28 +72,12 @@ Rules:
     lat: city?.lat ?? stop.lat ?? null,
     lng: city?.lng ?? stop.lng ?? null,
     summary: plan.summary,
-    places: plan.places.map(p => {
+    ...renumber(plan.places.map(p => {
       const w = wiki.get(p.wiki) || wikiEn.get(p.wiki_en)
       return { name: p.name, why: p.why, minutes: p.minutes, wiki_en: p.wiki_en, ...(w && { img: w.img, extract: w.extract, url: w.url, lat: w.lat, lng: w.lng }) }
-    }),
-    days: cleaned.days.map((d, i) => ({ ...d, date: addDays(from, i) })),
+    }), cleaned.days.map((d, i) => ({ ...d, date: addDays(from, i) }))),
     planned: true,
   }
-}
-
-export async function findHotels(settings, trip, idx) {
-  const stop = trip.stops[idx]
-  const checkIn = addDays(trip.startDate, stopOffsets(trip)[idx])
-  const { text, sources, searched } = await ask(settings, {
-    search: true,
-    system: system(trip.lang),
-    prompt: `Search the web for hotels in ${stop.city}, ${stop.country} for ${trip.travelers} traveller(s), check-in ${checkIn}, ${stop.nights} night(s). ${tripBrief(trip)}
-Use real review scores from booking sites or Google/Tripadvisor and real nightly prices you find. Prefer well-located options near: ${(stop.places || []).slice(0, 5).map(p => p.name).join(', ') || 'the centre'}.
-Return {"hotels":[{"name":string,"area":string,"price_per_night_eur":number|null,"price_note":string|null (e.g. "from", date checked),"rating":number|null,"rating_scale":number|null (e.g. 10 or 5),"reviews":integer|null,"rating_source":string|null (site name),"url":string|null (page where you read rating or price),"why":string}]} with 6 to 8 hotels across price levels.`,
-  })
-  // Without a real web search any URL is a guess: drop it so the row reads as unverified.
-  const items = (parseJson(text).hotels || []).map(h => (searched ? h : { ...h, url: null }))
-  return { items, sources, unverified: !searched, at: new Date().toISOString() }
 }
 
 export async function findTransport(settings, trip, idx) {

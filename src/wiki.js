@@ -33,3 +33,15 @@ export async function wikiLookup(lang, titles) {
   }
   return out
 }
+
+// Full introduction of a Wikipedia page (all the lead paragraphs), from its URL; cached per page.
+const intros = new Map()
+export function wikiIntro(url) {
+  const m = /^https:\/\/(\w+)\.wikipedia\.org\/wiki\/(.+)$/.exec(url || '')
+  if (!m) return Promise.resolve('')
+  if (!intros.has(url)) {
+    const q = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', origin: '*', redirects: '1', prop: 'extracts', exintro: '1', explaintext: '1', titles: decodeURIComponent(m[2]).replace(/_/g, ' ') })
+    intros.set(url, getJson(`https://${m[1]}.wikipedia.org/w/api.php?${q}`).then(d => d.query?.pages?.[0]?.extract || '').catch(e => { intros.delete(url); throw e }))
+  }
+  return intros.get(url)
+}

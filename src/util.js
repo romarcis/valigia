@@ -7,17 +7,6 @@ export const addDays = (iso, n) => {
 // Day offset of each stop from trip start.
 export const stopOffsets = trip => trip.stops.reduce((acc, s, i) => [...acc, i ? acc[i - 1] + trip.stops[i - 1].nights : 0], [])
 
-// Hotels ranked by the chosen key. "value" = rating (0-10) per euro; unknown values sort last.
-export function rankHotels(items, by) {
-  const score = h => (h.rating && h.rating_scale ? (h.rating / h.rating_scale) * 10 : null)
-  const key = {
-    price: h => h.price_per_night_eur ?? Infinity,
-    rating: h => -(score(h) ?? -Infinity),
-    value: h => (score(h) && h.price_per_night_eur ? -(score(h) / h.price_per_night_eur) : Infinity),
-  }[by]
-  return [...items].sort((a, b) => key(a) - key(b) || 0).map(h => ({ ...h, score10: score(h) }))
-}
-
 // Walking minutes between two {lat,lng}: straight-line distance x1.3 for street detours, at 4.8 km/h.
 // ponytail: crow-flies estimate, swap for a routing API if users need door-to-door accuracy.
 export function walkMinutes(a, b) {
@@ -46,6 +35,48 @@ export function cleanDays(days, placeCount) {
     return { ...d, items }
   })
   return { days: out, dropped }
+}
+
+// Numbers places in the order the itinerary visits them (places on no day go last), so pins read
+// 1, 2, 3… down the days. Returns { places, days } with every placeIdx remapped to the new order.
+export function renumber(places, days) {
+  const idxOf = it => it.placeIdx ?? (i => (i < 0 ? null : i))(places.findIndex(p => p.name === it.place)) // old plans: by name
+  const order = []
+  for (const d of days) for (const it of d.items) { const i = idxOf(it); if (i != null && !order.includes(i)) order.push(i) }
+  places.forEach((_, i) => order.includes(i) || order.push(i))
+  const to = new Map(order.map((old, n) => [old, n]))
+  return {
+    places: order.map(i => places[i]),
+    days: days.map(d => ({ ...d, items: d.items.map(it => { const i = idxOf(it); return { ...it, placeIdx: i == null ? null : to.get(i) } }) })),
+  }
+}
+
+// Joins OSRM legs into one line, remembering where each leg ends: cuts[k] is the index in coords
+// of waypoint k + 1 (waypoint 0 is coords[0]).
+export function joinLegs(legs) {
+  const coords = [], cuts = []
+  for (const leg of legs) {
+    for (const s of leg.steps) coords.push(...s.geometry.coordinates)
+    cuts.push(coords.length - 1)
+  }
+  return { coords, cuts }
+}
+
+// The stretch of a day's route from its start to waypoint w (nothing for w = 0).
+export const routeUpTo = (route, w) => (w > 0 ? route.coords.slice(0, route.cuts[w - 1] + 1) : [])
+
+// Day and number of each place in the itinerary: numbers restart from 1 every day (the hotel is 0).
+// tags[placeIndex] = { day, n }, undefined for places no day visits.
+export function placeTags(stop) {
+  const tags = []
+  stop.days?.forEach((d, day) => {
+    let n = 0
+    for (const it of d.items) {
+      const i = it.placeIdx ?? stop.places.findIndex(p => p.name === it.place)
+      if (i >= 0 && !tags[i]) tags[i] = { day, n: ++n }
+    }
+  })
+  return tags
 }
 
 // Moves an itinerary item. from = {d, i}; to = {d, i} where to.i is the insert position among the

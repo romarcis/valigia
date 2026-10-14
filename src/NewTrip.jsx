@@ -1,154 +1,210 @@
-import { useCallback, useEffect, useState } from 'react'
-import { PlusIcon, XIcon, AirplaneTiltIcon, CarIcon, MotorcycleIcon } from '@phosphor-icons/react'
-import { suggestStops } from './planner.js'
+import { useEffect, useState } from 'react'
+import { PlusIcon, MinusIcon, XIcon, ArrowLeftIcon, ArrowRightIcon, SparkleIcon } from '@phosphor-icons/react'
+import { suggestStops, suggestDestinations } from './planner.js'
 import { errorText } from './i18n.js'
-import Combobox from './Combobox.jsx'
-import { loadAirports, searchAirports } from './airports.js'
-import { searchPlaces } from './places.js'
-
-const airportLabel = a => `${a.iata} · ${a.name}`
-const placeLabel = p => (p.region ? `${p.name} · ${p.region}` : p.name)
-const countryName = (cc, lang) => { try { return new Intl.DisplayNames([lang], { type: 'region' }).of(cc) } catch { return cc } }
+import { addDays } from './util.js'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const blankStop = () => ({ city: '', country: '', nights: 2 })
+const PACE = { slow: 'relaxed', mid: 'balanced', fast: 'packed' }
+const STEPS = ['what', 'when', 'where', 'who', 'stops', 'sleep']
 
+function Stepper({ label, value, min, max, onChange, unit }) {
+  const n = Number(value) || min
+  return (
+    <div className="stepper" role="group" aria-label={label}>
+      <button type="button" className="icon-btn" aria-label={`${label} −`} onClick={() => onChange(Math.max(min, n - 1))} disabled={n <= min}><MinusIcon size={20} aria-hidden /></button>
+      <output aria-live="polite"><b>{n}</b> {unit(n)}</output>
+      <button type="button" className="icon-btn" aria-label={`${label} +`} onClick={() => onChange(Math.min(max, n + 1))} disabled={n >= max}><PlusIcon size={20} aria-hidden /></button>
+    </div>
+  )
+}
+
+// One question per screen: what kind of trip, when and how long, where, who, the stops, then the hotels.
 export default function NewTrip({ t, settings, onCreate, onCancel }) {
-  const [f, setF] = useState({ title: '', startDate: today(), travelers: 2, budget: '', pace: 'mid', interests: '' })
-  const [stops, setStops] = useState([blankStop()])
-  const [mode, setMode] = useState(settings.homeMode || 'flight')
-  const [airport, setAirport] = useState(settings.homeAirport || null)
-  const [home, setHome] = useState(settings.homePlace || null)
-  const [airports, setAirports] = useState([])
-  useEffect(() => { loadAirports().then(setAirports) }, [])
-  const findAirports = useCallback(q => searchAirports(airports, q), [airports])
-  const origin = mode === 'flight' ? airport : home
-  const [idea, setIdea] = useState({ region: '', days: 7 })
-  const [suggesting, setSuggesting] = useState(false)
+  const [step, setStep] = useState(0)
+  const [f, setF] = useState({ likes: [], more: '', startDate: today(), nights: 7, region: '', travelers: 2, pace: 'mid' })
+  const [ideas, setIdeas] = useState(null)
+  const [stops, setStops] = useState([])
+  const [stopsFor, setStopsFor] = useState(null) // the answers the current stops were proposed for
+  const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
 
   const set = patch => setF(x => ({ ...x, ...patch }))
   const setStop = (i, patch) => setStops(ss => ss.map((s, j) => (j === i ? { ...s, ...patch } : s)))
+  const interests = [...f.likes, f.more.trim()].filter(Boolean).join(', ')
   const valid = stops.filter(s => s.city.trim())
   const total = stops.reduce((n, s) => n + (Number(s.nights) || 0), 0)
+  const key = JSON.stringify([f.region.trim(), f.nights, f.pace, interests])
+  const fmt = iso => new Intl.DateTimeFormat(settings.lang, { weekday: 'short', day: 'numeric', month: 'long' }).format(new Date(iso + 'T12:00:00'))
 
-  const suggest = async () => {
+  const run = async job => {
     setErr(null)
-    setSuggesting(true)
-    try {
-      const pace = { slow: 'relaxed', mid: 'balanced', fast: 'packed' }[f.pace]
-      setStops(await suggestStops(settings, { region: idea.region, days: idea.days, lang: settings.lang, pace, interests: f.interests }))
-      if (!f.title) set({ title: idea.region })
-    } catch (e) {
-      setErr(errorText(t, e))
-    } finally {
-      setSuggesting(false)
-    }
+    setBusy(true)
+    try { await job() } catch (e) { setErr(errorText(t, e)) } finally { setBusy(false) }
   }
+
+  const findIdeas = () => run(async () => {
+    const month = new Intl.DateTimeFormat('en', { month: 'long' }).format(new Date(f.startDate + 'T12:00:00'))
+    setIdeas(await suggestDestinations(settings, { interests, month, nights: f.nights, lang: settings.lang }))
+  })
+
+  const proposeStops = () => run(async () => {
+    setStops(await suggestStops(settings, { region: f.region.trim(), days: f.nights, lang: settings.lang, pace: PACE[f.pace], interests }))
+    setStopsFor(key)
+  })
+
+  // Reaching the last step proposes the stops, again only if an answer changed since.
+  useEffect(() => {
+    if (STEPS[step] === 'stops' && stopsFor !== key && !busy) proposeStops()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step])
+
+  const can = { what: true, when: !!f.startDate, where: !!f.region.trim(), who: true, stops: valid.length > 0 && !busy, sleep: valid.length > 0 }[STEPS[step]]
+  const last = step === STEPS.length - 1
 
   const submit = e => {
     e.preventDefault()
+    if (!can) return
+    if (!last) { setErr(null); setStep(s => s + 1); return }
     onCreate({
-      title: f.title.trim() || valid.map(s => s.city).join(' · '),
+      title: f.region.trim() || valid.map(s => s.city).join(' · '),
       startDate: f.startDate,
       travelers: Number(f.travelers) || 1,
-      budget: Number(f.budget) || null,
-      pace: { slow: 'relaxed', mid: 'balanced', fast: 'packed' }[f.pace],
-      interests: f.interests.trim(),
-      stops: valid.map(s => ({ city: s.city.trim(), country: s.country.trim(), nights: Math.max(1, Number(s.nights) || 1) })),
-      travel: mode === 'flight'
-        ? { mode, from: airport.name, airport }
-        : { mode, from: home.name, home: { lat: home.lat, lng: home.lng } },
+      pace: PACE[f.pace],
+      interests,
+      stops: valid.map(s => ({ city: s.city.trim(), country: s.country.trim(), nights: Math.max(1, Number(s.nights) || 1), ...(s.hotel?.trim() && { hotel: { name: s.hotel.trim() } }) })),
     })
   }
 
   return (
-    <form className="pane" onSubmit={submit}>
+    <form className="pane wiz" onSubmit={submit}>
       <div className="pane-head">
         <h1>{t.newTrip}</h1>
         {onCancel && <button type="button" className="btn btn-quiet" onClick={onCancel}>{t.cancel}</button>}
       </div>
 
-      <fieldset>
-        <legend>{t.howGet}</legend>
-        <div className="seg seg-fill" role="radiogroup" aria-label={t.howGet}>
-          {[['flight', t.byPlane, AirplaneTiltIcon], ['car', t.byCar, CarIcon], ['moto', t.byMoto, MotorcycleIcon]].map(([v, l, I]) => (
-            <button type="button" key={v} role="radio" aria-checked={mode === v} onClick={() => setMode(v)}>
-              <I size={18} aria-hidden /> {l}
-            </button>
-          ))}
-        </div>
-        {mode === 'flight' ? (
-          <Combobox
-            key="airport" label={t.fromAirport} placeholder={t.fromAirportPh} emptyText={t.noAirport} required
-            value={airport} display={airportLabel} onChange={setAirport} search={findAirports}
-            renderOption={a => <><b className="combo-code">{a.iata}</b> <span>{a.name}</span> <span className="muted">{a.city ? `${a.city}, ` : ''}{countryName(a.cc, settings.lang)}</span></>}
-          />
-        ) : (
-          <Combobox
-            key="place" label={t.fromCity} placeholder={t.fromCityPh} emptyText={t.noPlace} required delay={300}
-            value={home} display={placeLabel} onChange={setHome} search={searchPlaces}
-            renderOption={p => <><b>{p.name}</b> <span className="muted">{p.region}</span></>}
-          />
-        )}
-        {mode === 'flight' && <p className="hint">{t.flightHint}</p>}
-      </fieldset>
+      <div className="wiz-progress" aria-label={t.stepOf(step + 1, STEPS.length)}>
+        {STEPS.map((s, i) => <span key={s} className={i <= step ? 'is-done' : ''} />)}
+      </div>
 
-      <fieldset className="idea">
-        <legend>{t.suggest}</legend>
-        <div className="grid-2-1">
-          <label className="field"><span>{t.suggestRegion}</span>
-            <input value={idea.region} onChange={e => setIdea({ ...idea, region: e.target.value })} />
-          </label>
-          <label className="field"><span>{t.suggestDays}</span>
-            <input type="number" min="1" max="60" value={idea.days} onChange={e => setIdea({ ...idea, days: e.target.value })} />
-          </label>
-        </div>
-        <p className="hint">{idea.region.trim() ? t.suggestHint : t.needRegion}</p>
-        <button type="button" className="btn btn-quiet" onClick={suggest} disabled={!idea.region.trim() || suggesting} aria-busy={suggesting}>
-          {suggesting ? `${t.planning}…` : t.suggest}
-        </button>
-        {err && <p className="error" role="alert">{err}</p>}
-      </fieldset>
-
-      <fieldset>
-        <legend>{t.formWhere} <span className="muted">· {t.nights(total)}</span></legend>
-        <ol className="stop-rows">
-          {stops.map((s, i) => (
-            <li key={i} className="stop-row">
-              <span className="stop-row-num" aria-hidden>{String(i + 1).padStart(2, '0')}</span>
-              <label className="field"><span>{t.formCity}</span><input value={s.city} onChange={e => setStop(i, { city: e.target.value })} required={i === 0} /></label>
-              <label className="field"><span>{t.formCountry}</span><input value={s.country} onChange={e => setStop(i, { country: e.target.value })} /></label>
-              <label className="field field-num"><span>{t.formNights}</span><input type="number" min="1" max="30" value={s.nights} onChange={e => setStop(i, { nights: e.target.value })} /></label>
-              <button type="button" className="icon-btn icon-btn-quiet" aria-label={`${t.remove} ${s.city}`} onClick={() => setStops(ss => ss.filter((_, j) => j !== i))} disabled={stops.length === 1}>
-                <XIcon size={18} aria-hidden />
-              </button>
-            </li>
-          ))}
-        </ol>
-        <button type="button" className="btn btn-quiet" onClick={() => setStops(ss => [...ss, blankStop()])}><PlusIcon size={16} aria-hidden /> {t.addStop}</button>
-      </fieldset>
-
-      <fieldset>
-        <div className="grid-2">
-          <label className="field"><span>{t.formStart}</span><input type="date" value={f.startDate} onChange={e => set({ startDate: e.target.value })} required /></label>
-          <label className="field"><span>{t.formTravelers}</span><input type="number" min="1" max="20" value={f.travelers} onChange={e => set({ travelers: e.target.value })} /></label>
-          <label className="field"><span>{t.formBudget}</span><input type="number" min="0" step="10" value={f.budget} onChange={e => set({ budget: e.target.value })} /></label>
-        </div>
-        <div className="field">
-          <span id="pace">{t.formPace}</span>
-          <div className="seg seg-fill" role="radiogroup" aria-labelledby="pace">
-            {[['slow', t.paceSlow], ['mid', t.paceMid], ['fast', t.paceFast]].map(([v, l]) => (
-              <button type="button" key={v} role="radio" aria-checked={f.pace === v} onClick={() => set({ pace: v })}>{l}</button>
-            ))}
+      {STEPS[step] === 'what' && (
+        <section className="wiz-step">
+          <h2 className="wiz-q">{t.qWhat}</h2>
+          <p className="muted">{t.qWhatHint}</p>
+          <div className="picks">
+            {t.likes.map(l => {
+              const on = f.likes.includes(l)
+              return <button type="button" key={l} className="pick" aria-pressed={on} onClick={() => set({ likes: on ? f.likes.filter(x => x !== l) : [...f.likes, l] })}>{l}</button>
+            })}
           </div>
-        </div>
-        <label className="field"><span>{t.formInterests}</span><input value={f.interests} placeholder={t.interestsPh} onChange={e => set({ interests: e.target.value })} /></label>
-        <label className="field"><span>{t.formTitle}</span><input value={f.title} placeholder={valid.map(s => s.city).join(' · ')} onChange={e => set({ title: e.target.value })} /></label>
-      </fieldset>
+          <label className="field"><span>{t.qWhatMore}</span><input value={f.more} placeholder={t.interestsPh} onChange={e => set({ more: e.target.value })} /></label>
+        </section>
+      )}
 
-      {!valid.length && <p className="hint">{t.needCity}</p>}
-      <button className="btn btn-primary btn-wide" disabled={!valid.length || !origin}>{mode === 'flight' ? t.nextFlights : t.create}</button>
+      {STEPS[step] === 'when' && (
+        <section className="wiz-step">
+          <h2 className="wiz-q">{t.qWhen}</h2>
+          <label className="field"><span>{t.formStart}</span><input type="date" autoFocus value={f.startDate} min={today()} onChange={e => set({ startDate: e.target.value })} required /></label>
+          <div className="field"><span>{t.qHowLong}</span>
+            <Stepper label={t.qHowLong} value={f.nights} min={1} max={60} onChange={v => set({ nights: v })} unit={n => t.nights(n).replace(/^\d+\s*/, '')} />
+          </div>
+          {f.startDate && <p className="hint">{t.backOn(fmt(addDays(f.startDate, f.nights)))}</p>}
+        </section>
+      )}
+
+      {STEPS[step] === 'where' && (
+        <section className="wiz-step">
+          <h2 className="wiz-q">{t.qWhere}</h2>
+          <label className="field"><span>{t.qWhereLabel}</span><input autoFocus value={f.region} placeholder={t.qWherePh} onChange={e => set({ region: e.target.value })} /></label>
+          <div className="wiz-ideas">
+            <p className="muted">{t.qWhereUnsure}</p>
+            <button type="button" className="btn btn-quiet" onClick={findIdeas} disabled={busy} aria-busy={busy}>
+              <SparkleIcon size={16} aria-hidden /> {busy ? t.thinking : ideas ? t.moreIdeas : t.giveIdeas}
+            </button>
+            {ideas && (
+              <ul className="idea-cards">
+                {ideas.map(d => {
+                  const name = d.country && !d.name.includes(d.country) ? `${d.name}, ${d.country}` : d.name
+                  return (
+                    <li key={name}>
+                      <button type="button" className="idea-card" aria-pressed={f.region === name} onClick={() => set({ region: name })}>
+                        <b>{name}</b><span>{d.why}</span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
+      {STEPS[step] === 'who' && (
+        <section className="wiz-step">
+          <h2 className="wiz-q">{t.qWho}</h2>
+          <div className="field"><span>{t.formTravelers}</span>
+            <Stepper label={t.formTravelers} value={f.travelers} min={1} max={20} onChange={v => set({ travelers: v })} unit={t.people} />
+          </div>
+          <div className="field">
+            <span id="pace">{t.qPace}</span>
+            <div className="seg seg-fill" role="radiogroup" aria-labelledby="pace">
+              {[['slow', t.paceSlow], ['mid', t.paceMid], ['fast', t.paceFast]].map(([v, l]) => (
+                <button type="button" key={v} role="radio" aria-checked={f.pace === v} onClick={() => set({ pace: v })}>{l}</button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {STEPS[step] === 'stops' && (
+        <section className="wiz-step">
+          <h2 className="wiz-q">{t.qStops(f.region.trim())}</h2>
+          {busy ? <p className="wiz-wait" aria-live="polite">{t.thinkingStops}</p> : (
+            <>
+              <p className="muted">{t.qStopsHint} · {t.nights(total)}</p>
+              <ol className="stop-rows">
+                {stops.map((s, i) => (
+                  <li key={i} className="stop-row">
+                    <span className="stop-row-num" aria-hidden>{String(i + 1).padStart(2, '0')}</span>
+                    <label className="field"><span>{t.formCity}</span><input value={s.city} onChange={e => setStop(i, { city: e.target.value })} /></label>
+                    <label className="field"><span>{t.formCountry}</span><input value={s.country} onChange={e => setStop(i, { country: e.target.value })} /></label>
+                    <label className="field field-num"><span>{t.formNights}</span><input type="number" min="1" max="30" value={s.nights} onChange={e => setStop(i, { nights: e.target.value })} /></label>
+                    <button type="button" className="icon-btn icon-btn-quiet" aria-label={`${t.remove} ${s.city}`} onClick={() => setStops(ss => ss.filter((_, j) => j !== i))}>
+                      <XIcon size={18} aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ol>
+              <div className="row">
+                <button type="button" className="btn btn-quiet" onClick={() => setStops(ss => [...ss, blankStop()])}><PlusIcon size={16} aria-hidden /> {t.addStop}</button>
+                <button type="button" className="btn btn-quiet" onClick={proposeStops}><SparkleIcon size={16} aria-hidden /> {t.reproposeStops}</button>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {STEPS[step] === 'sleep' && (
+        <section className="wiz-step">
+          <h2 className="wiz-q">{t.qSleep}</h2>
+          <p className="muted">{t.qSleepHint}</p>
+          {stops.map((s, i) => s.city.trim() && (
+            <label key={i} className="field"><span>{s.city} · {t.nights(Number(s.nights) || 1)}</span>
+              <input autoFocus={i === 0} value={s.hotel || ''} placeholder={t.hotelPh} onChange={e => setStop(i, { hotel: e.target.value })} />
+            </label>
+          ))}
+        </section>
+      )}
+
+      {err && <p className="error" role="alert">{err}</p>}
+
+      <div className="wiz-nav">
+        {step > 0 && <button type="button" className="btn btn-quiet" onClick={() => { setErr(null); setStep(s => s - 1) }}><ArrowLeftIcon size={16} aria-hidden /> {t.back}</button>}
+        <button className="btn btn-primary" disabled={!can}>
+          {last ? t.create : <>{STEPS[step] === 'what' && !interests ? t.skip : t.next} <ArrowRightIcon size={16} aria-hidden /></>}
+        </button>
+      </div>
     </form>
   )
 }
