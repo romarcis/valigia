@@ -15,6 +15,13 @@ Nessun server: ogni utente collega la propria AI dalle Impostazioni.
 
 Gli abbonamenti Claude Pro/Max e ChatGPT Plus non si possono usare in app di terze parti.
 
+## Come ci arrivi
+
+Il nuovo viaggio parte da "Come ci arrivi?": aereo, auto o moto, e la città di partenza.
+
+- **Aereo**: voli reali di Google Flights tramite [SerpApi](https://serpapi.com) (chiave personale nelle Impostazioni, piano gratuito 250 ricerche/mese; le ricerche ripetute restano in cache). Andata verso la prima tappa e ritorno dall'ultima: partenza e arrivo diventano le prime e le ultime tappe del viaggio, il giorno 1 parte dall'atterraggio. La prenotazione si apre su Google Flights.
+- **Auto / moto**: percorso stradale con km e durata dal router OpenStreetMap (FOSSGIS), andata e ritorno.
+
 ## Sviluppo
 
 ```sh
@@ -41,4 +48,8 @@ $env:NDK_HOME = "$env:ANDROID_HOME\ndk\28.2.13676358"
 npx tauri android build --apk --target aarch64
 ```
 
-L'APK di release va firmato prima di distribuirlo: https://v2.tauri.app/distribute/sign/android/
+L'APK di release viene firmato se esiste `src-tauri/gen/android/keystore.properties` (`keyAlias`, `password`, `storeFile`), che non va mai committato.
+
+### Release su GitHub
+
+Aggiorna `version` in `src-tauri/tauri.conf.json`, poi `git tag v0.2.0 && git push --tags`. La action `.github/workflows/release.yml` crea una release in bozza con gli installer Windows; pubblicala da GitHub.

@@ -15,3 +15,12 @@ export async function walkRoute(points) {
     return { coords: points.map(p => [p.lng, p.lat]), legs: [], streets: false }
   }
 }
+
+// Driving route between two {lat,lng} (car and motorbike share it), via the FOSSGIS OSRM car router.
+export async function driveRoute(a, b) {
+  const path = [a, b].map(p => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join(';')
+  const data = await getJson(`https://routing.openstreetmap.de/routed-car/route/v1/driving/${path}?overview=simplified&geometries=geojson`, { timeout: 30000, retries: 1 })
+  const r = data.routes?.[0]
+  if (data.code !== 'Ok' || !r) throw new Error(data.code || 'no route')
+  return { km: Math.round(r.distance / 1000), min: Math.round(r.duration / 60), coords: r.geometry.coordinates }
+}

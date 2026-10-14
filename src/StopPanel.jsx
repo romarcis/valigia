@@ -5,6 +5,26 @@ import {
 } from '@phosphor-icons/react'
 import { rankHotels, stopOffsets, addDays, walkMinutes } from './util.js'
 import { canSearch } from './ai.js'
+import LegPanel from './LegPanel.jsx'
+import { AirplaneTakeoffIcon, AirplaneLandingIcon, MotorcycleIcon } from '@phosphor-icons/react'
+
+const NAVY = { '--ink': '#16213f', '--on-ink': '#ffffff' }
+
+// Rail entries for the journey there/back: a flight shows departure and arrival as two stops.
+function legChips(t, tv, dir) {
+  if (!tv) return []
+  const x = tv[dir]
+  if (tv.mode === 'flight') {
+    if (!x) return [{ dir, focus: 'dep', Icon: dir === 'out' ? AirplaneTakeoffIcon : AirplaneLandingIcon, label: dir === 'out' ? t.outbound : t.inbound }]
+    const a = x.legs[0].from, b = x.legs.at(-1).to
+    return [
+      { dir, focus: 'dep', Icon: AirplaneTakeoffIcon, label: `${a.id} ${a.time}`, title: `${t.departure} · ${a.name}` },
+      { dir, focus: 'arr', Icon: AirplaneLandingIcon, label: `${b.id} ${b.time}`, title: `${t.arrival} · ${b.name}` },
+    ]
+  }
+  const Icon = tv.mode === 'moto' ? MotorcycleIcon : CarIcon
+  return [{ dir, focus: null, Icon, label: dir === 'out' ? tv.from : `→ ${tv.from}` }]
+}
 
 const MODE_ICON = { walk: PersonSimpleWalkIcon, metro: TrainSimpleIcon, bus: BusIcon, tram: TramIcon, train: TrainIcon, car: CarIcon, ferry: BoatIcon, flight: AirplaneTiltIcon, taxi: TaxiIcon }
 const ModeIcon = ({ mode, size = 20 }) => { const I = MODE_ICON[mode] || PathIcon; return <I size={size} aria-hidden /> }
@@ -277,7 +297,7 @@ function Fetch({ t, label, hint, Icon, onRun, busy, err, warn }) {
   )
 }
 
-export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab, picked, onPick, onMove, busy, errors, settings, run, onChooseHotel, onDelete }) {
+export default function StopPanel({ t, trip, active, onSelect, leg, onLeg, onChangeFlight, inks, tab, setTab, picked, onPick, onMove, busy, errors, settings, run, onChooseHotel, onDelete }) {
   const stop = trip.stops[active]
   const lang = trip.lang
   const from = addDays(trip.startDate, stopOffsets(trip)[active])
@@ -293,16 +313,28 @@ export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab
     document.querySelector(`.tabpanel [data-place="${picked}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [picked, tab])
 
-  return (
-    <div className="stop-panel">
-      <nav className="rail" aria-label={t.formWhere}>
-        <ol>
-          {trip.stops.map((s, i) => (
+  const legChip = c => (
+    <li key={`${c.dir}-${c.focus}`}>
+      <button
+        className={'chip chip-leg' + (leg?.dir === c.dir && leg?.focus === c.focus ? ' is-active' : '')}
+        style={NAVY} title={c.title} onClick={() => onLeg(c.dir, c.focus)}
+      >
+        <span className="chip-num"><c.Icon size={16} weight="bold" aria-hidden /></span>
+        <span className="chip-city">{c.label}</span>
+      </button>
+    </li>
+  )
+
+  const rail = (
+    <nav className="rail" aria-label={t.formWhere}>
+      <ol>
+        {legChips(t, trip.travel, 'out').map(legChip)}
+        {trip.stops.map((s, i) => (
             <li key={s.id}>
               <button
-                className={'chip' + (i === active ? ' is-active' : '') + (busy[`${s.id}:plan`] ? ' is-busy' : '')}
+                className={'chip' + (i === active && !leg ? ' is-active' : '') + (busy[`${s.id}:plan`] ? ' is-busy' : '')}
                 style={{ '--ink': inks[i % inks.length].bg, '--on-ink': inks[i % inks.length].fg }}
-                aria-current={i === active ? 'step' : undefined}
+                aria-current={i === active && !leg ? 'step' : undefined}
                 onClick={() => onSelect(i)}
               >
                 <span className="chip-num">{String(i + 1).padStart(2, '0')}</span>
@@ -310,8 +342,23 @@ export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab
               </button>
             </li>
           ))}
-        </ol>
-      </nav>
+        {legChips(t, trip.travel, 'in').map(legChip)}
+      </ol>
+    </nav>
+  )
+
+  if (leg) {
+    return (
+      <div className="stop-panel" style={NAVY}>
+        {rail}
+        <LegPanel t={t} trip={trip} dir={leg.dir} focus={leg.focus} onChange={() => onChangeFlight(leg.dir)} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="stop-panel">
+      {rail}
 
       <header className="stop-head">
         <span className="stop-num" aria-hidden>{String(active + 1).padStart(2, '0')}</span>

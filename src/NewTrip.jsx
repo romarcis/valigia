@@ -1,7 +1,14 @@
-import { useState } from 'react'
-import { PlusIcon, XIcon } from '@phosphor-icons/react'
+import { useCallback, useEffect, useState } from 'react'
+import { PlusIcon, XIcon, AirplaneTiltIcon, CarIcon, MotorcycleIcon } from '@phosphor-icons/react'
 import { suggestStops } from './planner.js'
 import { errorText } from './i18n.js'
+import Combobox from './Combobox.jsx'
+import { loadAirports, searchAirports } from './airports.js'
+import { searchPlaces } from './places.js'
+
+const airportLabel = a => `${a.iata} · ${a.name}`
+const placeLabel = p => (p.region ? `${p.name} · ${p.region}` : p.name)
+const countryName = (cc, lang) => { try { return new Intl.DisplayNames([lang], { type: 'region' }).of(cc) } catch { return cc } }
 
 const today = () => new Date().toISOString().slice(0, 10)
 const blankStop = () => ({ city: '', country: '', nights: 2 })
@@ -9,6 +16,13 @@ const blankStop = () => ({ city: '', country: '', nights: 2 })
 export default function NewTrip({ t, settings, onCreate, onCancel }) {
   const [f, setF] = useState({ title: '', startDate: today(), travelers: 2, budget: '', pace: 'mid', interests: '' })
   const [stops, setStops] = useState([blankStop()])
+  const [mode, setMode] = useState(settings.homeMode || 'flight')
+  const [airport, setAirport] = useState(settings.homeAirport || null)
+  const [home, setHome] = useState(settings.homePlace || null)
+  const [airports, setAirports] = useState([])
+  useEffect(() => { loadAirports().then(setAirports) }, [])
+  const findAirports = useCallback(q => searchAirports(airports, q), [airports])
+  const origin = mode === 'flight' ? airport : home
   const [idea, setIdea] = useState({ region: '', days: 7 })
   const [suggesting, setSuggesting] = useState(false)
   const [err, setErr] = useState(null)
@@ -42,6 +56,9 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
       pace: { slow: 'relaxed', mid: 'balanced', fast: 'packed' }[f.pace],
       interests: f.interests.trim(),
       stops: valid.map(s => ({ city: s.city.trim(), country: s.country.trim(), nights: Math.max(1, Number(s.nights) || 1) })),
+      travel: mode === 'flight'
+        ? { mode, from: airport.name, airport }
+        : { mode, from: home.name, home: { lat: home.lat, lng: home.lng } },
     })
   }
 
@@ -51,6 +68,31 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
         <h1>{t.newTrip}</h1>
         {onCancel && <button type="button" className="btn btn-quiet" onClick={onCancel}>{t.cancel}</button>}
       </div>
+
+      <fieldset>
+        <legend>{t.howGet}</legend>
+        <div className="seg seg-fill" role="radiogroup" aria-label={t.howGet}>
+          {[['flight', t.byPlane, AirplaneTiltIcon], ['car', t.byCar, CarIcon], ['moto', t.byMoto, MotorcycleIcon]].map(([v, l, I]) => (
+            <button type="button" key={v} role="radio" aria-checked={mode === v} onClick={() => setMode(v)}>
+              <I size={18} aria-hidden /> {l}
+            </button>
+          ))}
+        </div>
+        {mode === 'flight' ? (
+          <Combobox
+            key="airport" label={t.fromAirport} placeholder={t.fromAirportPh} emptyText={t.noAirport} required
+            value={airport} display={airportLabel} onChange={setAirport} search={findAirports}
+            renderOption={a => <><b className="combo-code">{a.iata}</b> <span>{a.name}</span> <span className="muted">{a.city ? `${a.city}, ` : ''}{countryName(a.cc, settings.lang)}</span></>}
+          />
+        ) : (
+          <Combobox
+            key="place" label={t.fromCity} placeholder={t.fromCityPh} emptyText={t.noPlace} required delay={300}
+            value={home} display={placeLabel} onChange={setHome} search={searchPlaces}
+            renderOption={p => <><b>{p.name}</b> <span className="muted">{p.region}</span></>}
+          />
+        )}
+        {mode === 'flight' && <p className="hint">{t.flightHint}</p>}
+      </fieldset>
 
       <fieldset className="idea">
         <legend>{t.suggest}</legend>
@@ -106,7 +148,7 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
       </fieldset>
 
       {!valid.length && <p className="hint">{t.needCity}</p>}
-      <button className="btn btn-primary btn-wide" disabled={!valid.length}>{t.create}</button>
+      <button className="btn btn-primary btn-wide" disabled={!valid.length || !origin}>{mode === 'flight' ? t.nextFlights : t.create}</button>
     </form>
   )
 }

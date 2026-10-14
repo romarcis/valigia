@@ -29,7 +29,7 @@ function tint(map) {
   }
 }
 
-export default function MapView({ stops, active, places, routes = [], inks, overview, selected, onPick }) {
+export default function MapView({ stops, active, places, routes = [], legs = [], legFocus, inks, overview, selected, onPick }) {
   const box = useRef(null)
   const map = useRef(null)
   const markers = useRef([])
@@ -44,6 +44,8 @@ export default function MapView({ stops, active, places, routes = [], inks, over
       tint(m)
       m.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       m.addLayer({ id: 'route', type: 'line', source: 'route', paint: { 'line-color': '#16213f', 'line-width': 2.5, 'line-dasharray': [2, 1.6] } })
+      m.addSource('legs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      m.addLayer({ id: 'legs', type: 'line', source: 'legs', layout: { 'line-cap': 'round' }, paint: { 'line-color': '#16213f', 'line-width': ['case', ['get', 'hot'], 4, 2.5], 'line-opacity': ['case', ['get', 'hot'], 1, 0.7], 'line-dasharray': [1, 1.6] } })
       m.addSource('days', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       const daysPaint = { 'line-color': ['get', 'ink'], 'line-opacity': ['case', ['get', 'dim'], 0.35, 0.9], 'line-width': ['case', ['get', 'hot'], 5, 3.5] }
       // Day 1 solid, later days dashed, so overlapping days stay readable.
@@ -84,6 +86,19 @@ export default function MapView({ stops, active, places, routes = [], inks, over
           geometry: { type: 'LineString', coordinates: r.coords },
         })),
       })
+      m.getSource('legs')?.setData({
+        type: 'FeatureCollection',
+        features: legs.filter(l => (overview || l.hot) && l.coords.length > 1).map(l => ({ type: 'Feature', properties: { hot: !!l.hot }, geometry: { type: 'LineString', coordinates: l.coords } })),
+      })
+      for (const l of legs.filter(l => overview || l.hot)) {
+        for (const p of l.pins || []) {
+          if (p?.lat == null) continue
+          const el = document.createElement('div')
+          el.className = 'leg-pin'
+          el.textContent = p.label
+          markers.current.push(new maplibregl.Marker({ element: el }).setLngLat([p.lng, p.lat]).addTo(m))
+        }
+      }
       pins.current = []
       places.forEach((p, n) => {
         if (p.lat == null) return
@@ -102,7 +117,10 @@ export default function MapView({ stops, active, places, routes = [], inks, over
       const focus = places.filter(p => p.lat != null)
       const here = stops[active]?.lat != null ? [stops[active]] : []
       // Overview frames the whole route; a stop frames its places, or its city when it has none yet.
-      const pts = overview ? located : focus.length ? focus : here.length ? here : located
+      const hotLeg = legs.find(l => l.hot)
+      const legPts = legs.flatMap(l => l.coords.length ? [l.coords[0], l.coords.at(-1)] : []).map(([lng, lat]) => ({ lat, lng }))
+      const pts = legFocus && hotLeg ? hotLeg.coords.map(([lng, lat]) => ({ lat, lng }))
+        : overview ? [...located, ...legPts] : focus.length ? focus : here.length ? here : located
       if (!pts.length) return
       const b = new maplibregl.LngLatBounds()
       pts.forEach(p => b.extend([p.lng, p.lat]))
@@ -112,7 +130,7 @@ export default function MapView({ stops, active, places, routes = [], inks, over
     else pending.current = draw
     // selected is read inside draw for the initial class only; the effect below owns selection changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stops, active, places, routes, inks, onPick, overview])
+  }, [stops, active, places, routes, legs, legFocus, inks, onPick, overview])
 
   // Highlight the picked place: stamp its pin, name it, and bring it into view without re-fitting the stop.
   useEffect(() => {

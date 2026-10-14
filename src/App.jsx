@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GearSixIcon, PlusIcon, MapTrifoldIcon, ListBulletsIcon } from '@phosphor-icons/react'
 import MapView from './MapView.jsx'
 import Settings, { isConnected } from './Settings.jsx'
@@ -12,6 +12,8 @@ import LogPanel, { useLog } from './LogPanel.jsx'
 import PackingLoader from './PackingLoader.jsx'
 import { walkRoute } from './routing.js'
 import { locatePlaces } from './geo.js'
+import FlightPicker from './FlightPicker.jsx'
+import { prepareTravel, travelLines } from './travel.js'
 
 // Lithographic label inks, one per stop in travel order.
 export const INKS = [
@@ -49,6 +51,8 @@ export default function App() {
   const [errors, setErrors] = useState({}) // `${stopId}:${job}` -> message
   const [showLog, setShowLog] = useState(false)
   const [packing, setPacking] = useState(null) // { city, step, total } while stops are being planned
+  const [leg, setLeg] = useState(null) // { dir: 'out'|'in', focus: 'dep'|'arr'|null } when a journey stop is open
+  const [flightDraft, setFlightDraft] = useState(null) // { draft, only?, tripId? } while choosing flights
   const logEntries = useLog()
   const logErrors = logEntries.filter(e => e.level === 'error').length
 
@@ -58,6 +62,8 @@ export default function App() {
 
   useEffect(() => { document.documentElement.lang = settings.lang }, [settings.lang])
   useEffect(() => { if (trip && active >= trip.stops.length) setActive(0) }, [trip, active])
+
+  const updateTrip = useCallback((tripId, patch) => setTrips(ts => ts.map(tr => (tr.id === tripId ? { ...tr, ...patch } : tr))), [setTrips])
 
   const updateStop = useCallback((tripId, stopId, patch) => {
     setTrips(ts => ts.map(tr => (tr.id !== tripId ? tr : { ...tr, stops: tr.stops.map(s => (s.id === stopId ? { ...s, ...patch } : s)) })))
@@ -84,8 +90,29 @@ export default function App() {
     }
   }, [settings, t, updateStop])
 
-  const createTrip = async draft => {
+  // From the new-trip form: flights are chosen first, then the stops are planned around them.
+  const createTrip = draft => {
+    const tv = draft.travel
+    setSettings(s => ({ ...s, homeMode: tv.mode, ...(tv.airport ? { homeAirport: tv.airport } : { homePlace: { name: tv.from, ...tv.home } }) }))
+    if (draft.travel.mode === 'flight') { setFlightDraft({ draft }); setView('flights'); return }
+    startTrip(draft)
+  }
+
+  const flightsChosen = fl => {
+    const { draft, only, tripId } = flightDraft
+    setFlightDraft(null)
+    if (tripId) {
+      const tv = trips.find(x => x.id === tripId).travel
+      updateTrip(tripId, { travel: { ...tv, [only]: fl[only] } })
+      setView('trip')
+      return
+    }
+    startTrip({ ...draft, travel: { ...draft.travel, out: fl?.out || null, in: fl?.in || null } })
+  }
+
+  const startTrip = async draft => {
     const tr = { ...draft, id: newId(), lang: settings.lang, stops: draft.stops.map(s => ({ ...s, id: newId() })) }
+    setLeg(null)
     setTrips(ts => [tr, ...ts])
     setCurrentId(tr.id)
     setActive(0)
@@ -108,11 +135,12 @@ export default function App() {
 
   const chooseHotel = name => trip && stop && updateStop(trip.id, stop.id, { chosenHotel: stop.chosenHotel === name ? null : name })
 
-  const selectStop = useCallback(i => { setActive(i); setOverview(false); setPicked(null) }, [])
+  const selectStop = useCallback(i => { setActive(i); setOverview(false); setPicked(null); setLeg(null) }, [])
+  const openLeg = useCallback((dir, focus) => { setLeg({ dir, focus }); setOverview(false); setPicked(null) }, [])
   // From the map: highlight the place and make sure a tab that lists it is showing.
   const pickFromMap = useCallback(i => { setPicked(i); setTab(tb => (tb === 'days' || tb === 'places' ? tb : 'days')) }, [])
   const pickFromList = useCallback(i => { setPicked(p => (p === i ? null : i)); setOverview(false) }, [])
-  const places = useMemo(() => (overview || !stop?.places ? [] : stop.places), [overview, stop])
+  const places = useMemo(() => (overview || leg || !stop?.places ? [] : stop.places), [overview, leg, stop])
 
   // For the stop on screen: first locate places Wikipedia left without coordinates (once),
   // then compute each day's street walking route (once, stored with the day).
@@ -142,11 +170,20 @@ export default function App() {
     return () => { cancelled = true }
   }, [trip, stop, updateStop])
 
+  // Journey there and back: airport positions or the driving route, computed once the stops are located.
+  const travelJob = useRef(null)
+  useEffect(() => {
+    if (!trip?.travel || travelJob.current === trip.id) return
+    travelJob.current = trip.id
+    prepareTravel(trip).then(tv => { if (tv) updateTrip(trip.id, { travel: tv }) }).finally(() => { travelJob.current = null })
+  }, [trip, updateTrip])
+  const legs = useMemo(() => travelLines(trip?.travel).map(l => ({ ...l, hot: leg?.dir === l.id })), [trip, leg])
+
   // The day that holds the picked place is drawn on top.
-  const dayRoutes = useMemo(() => (overview || !stop?.days ? [] : stop.days.map((d, i) => ({
+  const dayRoutes = useMemo(() => (overview || leg || !stop?.days ? [] : stop.days.map((d, i) => ({
     day: i, coords: d.route?.coords || [],
     hot: picked != null && d.items.some(it => (it.placeIdx ?? stop.places.findIndex(p => p.name === it.place)) === picked),
-  }))), [overview, stop, picked])
+  }))), [overview, leg, stop, picked])
 
   return (
     <div className="app" style={stop && view === 'trip' ? { '--ink': INKS[active % INKS.length].bg, '--on-ink': INKS[active % INKS.length].fg } : undefined}>
@@ -174,6 +211,11 @@ export default function App() {
       <main className="workspace">
         <aside className="panel">
           {view === 'settings' && <Settings t={t} settings={settings} setSettings={setSettings} onDone={() => setView('new')} />}
+          {view === 'flights' && flightDraft && (
+            <FlightPicker t={t} settings={settings} draft={flightDraft.draft} only={flightDraft.only}
+              onDone={flightsChosen}
+              onSkip={() => (flightDraft.tripId ? (setFlightDraft(null), setView('trip')) : flightsChosen(null))} />
+          )}
           {view === 'new' && <NewTrip t={t} settings={settings} onCreate={createTrip} onCancel={trips.length ? () => setView('trip') : null} />}
           {view === 'trip' && !trip && (
             <section className="empty">
@@ -185,6 +227,7 @@ export default function App() {
           {view === 'trip' && trip && (
             <StopPanel
               t={t} trip={trip} active={active} onSelect={selectStop} inks={INKS}
+              leg={leg} onLeg={openLeg} onChangeFlight={dir => { setFlightDraft({ draft: trip, only: dir, tripId: trip.id }); setView('flights') }}
               tab={tab} setTab={setTab} picked={picked} onPick={pickFromList}
               onMove={(from, to) => updateStop(trip.id, stop.id, { days: moveItem(stop.days, from, to) })} busy={busy} errors={errors} settings={settings}
               run={async job => {
@@ -199,7 +242,7 @@ export default function App() {
 
         <section className="map-wrap">
           {showLog && <LogPanel t={t} entries={logEntries} onClose={() => setShowLog(false)} />}
-          <MapView stops={trip?.stops || []} active={active} places={places} routes={dayRoutes} inks={INKS} overview={overview} selected={overview ? null : picked} onPick={pickFromMap} />
+          <MapView stops={trip?.stops || []} active={active} places={places} routes={dayRoutes} legs={legs} legFocus={!!leg} inks={INKS} overview={overview} selected={overview ? null : picked} onPick={pickFromMap} />
           {trip && (
             <button className="map-overview" aria-pressed={overview} onClick={() => setOverview(o => !o)}>
               <MapTrifoldIcon size={18} aria-hidden /> {trip.title}

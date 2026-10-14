@@ -76,3 +76,9 @@ export async function locatePlaces(places, stop) {
   log(still.length ? 'error' : 'ok', `${stop.city}: posizione trovata per ${places.length - still.length}/${places.length} luoghi${still.length ? ` (mancano: ${still.join(', ')})` : ''}`)
   return out
 }
+
+// Free-text place -> {lat, lng} via OpenStreetMap (homes, airports). null when nothing matches.
+export async function geocode(q) {
+  const [hit] = await getJson(`https://nominatim.openstreetmap.org/search?${new URLSearchParams({ q, format: 'jsonv2', limit: '1' })}`, { headers: { 'User-Agent': 'Valigia/0.1 (trip planner)' } })
+  return hit ? { lat: Number(hit.lat), lng: Number(hit.lon) } : null
+}

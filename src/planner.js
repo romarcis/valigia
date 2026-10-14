@@ -8,6 +8,23 @@ const LANG_NAME = { it: 'Italian', en: 'English' }
 const system = lang => `You are a meticulous travel planner. Write every human-readable string in ${LANG_NAME[lang]}.
 Reply with ONE JSON object only, no prose, no markdown fences. Never invent ratings, prices or review counts: if you cannot find a value, use null.`
 
+// What the AI must know about how the traveller reaches the first stop and leaves the last one.
+function journeyNote(trip, idx) {
+  const tv = trip.travel
+  if (!tv) return ''
+  const lines = []
+  if (idx === 0) {
+    const f = tv.out
+    if (tv.mode === 'flight' && f) lines.push(`Arrival: flight landing at ${f.legs.at(-1).to.name} (${f.legs.at(-1).to.id}) at ${f.legs.at(-1).to.time} on day 1. Start day 1 with the transfer from that airport and the check-in; plan nothing before the landing time.`)
+    else if (tv.mode !== 'flight') lines.push(`Arrival: by ${tv.mode === 'moto' ? 'motorbike' : 'car'} from ${tv.from} on day 1${tv.out?.min ? ` after about ${Math.round(tv.out.min / 60)} hours of driving` : ''}: keep day 1 light and include parking near the hotel.`)
+  }
+  if (idx === trip.stops.length - 1) {
+    const f = tv.in
+    if (tv.mode === 'flight' && f) lines.push(`Departure: return flight from ${f.legs[0].from.name} (${f.legs[0].from.id}) at ${f.legs[0].from.time} on ${f.date}.`)
+  }
+  return lines.length ? lines.join('\n') + '\n' : ''
+}
+
 const tripBrief = t =>
   `Travellers: ${t.travelers}. Budget per night for lodging: ${t.budget ? `${t.budget} EUR` : 'not set'}. Pace: ${t.pace}. Interests: ${t.interests || 'general sightseeing'}.`
 
@@ -26,7 +43,7 @@ export async function planStop(settings, trip, idx) {
   const lang = trip.lang
   const { text } = await ask(settings, {
     system: system(lang),
-    prompt: `Trip stop ${idx + 1} of ${trip.stops.length}: ${stop.city}, ${stop.country}. ${stop.nights} night(s), arriving ${from}.
+    prompt: `${journeyNote(trip, idx)}Trip stop ${idx + 1} of ${trip.stops.length}: ${stop.city}, ${stop.country}. ${stop.nights} night(s), arriving ${from}.
 Previous stop: ${trip.stops[idx - 1]?.city || 'none (trip start)'}. Next stop: ${trip.stops[idx + 1]?.city || 'none (trip end)'}.
 ${tripBrief(trip)}
 Return:

@@ -57,3 +57,15 @@ console.log('ok 2')
   assert.equal(moveItem(days, { d: 0, i: 1 }, { d: 0, i: 2 }), days)
   console.log('ok 3')
 }
+
+{
+  const { readFileSync } = await import('node:fs')
+  const { searchAirports, nearestAirports } = await import('./airports.js')
+  const list = JSON.parse(readFileSync(new URL('./data/airports.json', import.meta.url))).map(([iata, name, city, cc, lat, lng, size]) => ({ iata, name, city, cc, lat, lng, size }))
+  const codes = q => searchAirports(list, q).map(a => a.iata)
+  assert.equal(codes('MXP')[0], 'MXP') // exact code first
+  assert.ok(codes('milano').includes('MXP') && codes('milano').includes('LIN'), codes('milano').join()) // Italian name finds "Milan"
+  assert.deepEqual(nearestAirports(list, { lat: 41.0064, lng: 28.9759 }, 2).map(a => a.iata).sort(), ['IST', 'SAW']) // Istanbul centre
+  assert.equal(nearestAirports(list, { lat: 37.3886, lng: -5.9823 })[0].iata, 'SVQ') // Seville
+  console.log('ok 4')
+}
