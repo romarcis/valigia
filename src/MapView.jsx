@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
-import { dayTone } from './util.js'
+import { dayTone, arcs } from './util.js'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 
 maplibregl.setWorkerUrl(workerUrl)
@@ -45,6 +45,8 @@ export default function MapView({ stops, active, places, tags = [], venues = [],
     const m = new maplibregl.Map({ container: box.current, style: STYLE, center: [12.5, 45], zoom: 3.4, attributionControl: { compact: true } })
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
     m.on('load', () => {
+      // phone: the credits start folded into the small (i) button; a tap opens them
+      if (matchMedia('(max-width: 860px)').matches) box.current?.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show')
       tint(m)
       m.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       m.addLayer({ id: 'route', type: 'line', source: 'route', paint: { 'line-color': '#16213f', 'line-width': 2.5, 'line-dasharray': [2, 1.6] } })
@@ -74,7 +76,7 @@ export default function MapView({ stops, active, places, tags = [], venues = [],
 
       m.getSource('route')?.setData({
         type: 'Feature',
-        geometry: { type: 'LineString', coordinates: located.map(s => [s.lng, s.lat]) },
+        geometry: { type: 'LineString', coordinates: arcs(located.map(s => [s.lng, s.lat])) }, // curved: a move between stops
       })
 
       // Overview: every stop as its luggage label; the active one is stamped. Inside a stop its places speak instead.
@@ -97,7 +99,7 @@ export default function MapView({ stops, active, places, tags = [], venues = [],
         }
       }
 
-      const ink = inks[active % inks.length]
+      const ink = inks[0] // every stop's days start from red and go on through the palette
       const tone = d => dayTone(ink, d, dayCount)
       const anyHot = routes.some(r => r.hot)
       m.getSource('days')?.setData({
@@ -162,7 +164,9 @@ export default function MapView({ stops, active, places, tags = [], venues = [],
       if (!pts.length) return
       const b = new maplibregl.LngLatBounds()
       pts.forEach(p => b.extend([p.lng, p.lat]))
-      m.fitBounds(b, { padding: 72, maxZoom: pts.length === 1 ? (dayPts.length ? 15 : 11) : (dayPts.length ? 16 : 14), duration: 900 })
+      // a short map (phone) keeps just enough room for the pins; the zoom buttons sit on the right
+      const pad = m.getContainer().clientHeight < 400 ? { top: 28, bottom: 22, left: 24, right: 56 } : 72
+      m.fitBounds(b, { padding: pad, maxZoom: pts.length === 1 ? (dayPts.length ? 15 : 11) : (dayPts.length ? 16 : 14), duration: 900 })
     }
     if (pending.current === 'ready') draw()
     else pending.current = draw

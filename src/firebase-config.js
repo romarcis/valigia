@@ -10,6 +10,10 @@ export default {
   appId: '1:352031568640:web:e1be073d56616bb98179e5',
 }
 
+// Google sign-in on Android: the project's "Web client" OAuth ID (Firebase > Authentication > Sign-in method >
+// Google > Web SDK configuration). Public, like the config above; Google checks the app by package name + SHA-1.
+export const googleWebClientId = '352031568640-9l9kgn0234j86mkcd6tkc1ekj42kmh8k.apps.googleusercontent.com'
+
 // Google sign-in on Windows: OAuth client of type "Desktop app" in the same Google Cloud project.
 // Google documents that an installed app's client secret is not confidential (PKCE protects the flow).
 // Read from .env.local (not committed): VITE_GOOGLE_DESKTOP_ID / VITE_GOOGLE_DESKTOP_SECRET.

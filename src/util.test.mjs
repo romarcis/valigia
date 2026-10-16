@@ -214,3 +214,60 @@ console.log('ok slot')
   assert.equal(keepTicket({ prices: [] }, { prices: [] }), false)
   console.log('ok ticket')
 }
+
+{
+  const { dayTimes } = await import('./util.js')
+  const stop = { places: [{ name: 'A', minutes: 60 }, { name: 'B', minutes: 30 }, { name: 'C', minutes: 30 }] }
+  const items = [{ place: 'A', placeIdx: 0 }, { place: 'B', placeIdx: 1 }, { place: 'C', placeIdx: 2 }]
+  assert.deepEqual(dayTimes(stop, { items }, '09:00').times, ['09:00', '10:00', '10:30'])
+  // late at B: B starts when the traveller says, C follows from there; A keeps its time
+  assert.deepEqual(dayTimes(stop, { items: items.map((x, i) => (i === 1 ? { ...x, at: '11:20' } : x)) }, '09:00').times, ['09:00', '11:20', '11:50'])
+  console.log('ok fixed time')
+}
+
+{
+  const { reschedule } = await import('./util.js')
+  const day = date => ({ date, title: 'x', items: [{ place: 'A' }] })
+  const trip = { startDate: '2026-11-12', stops: [
+    { city: 'A', nights: 2, days: [day('2026-11-12'), day('2026-11-13')] },
+    { city: 'B', nights: 2, days: [day('2026-11-14'), day('2026-11-15')] },
+  ] }
+  // second stop to start on the 20th: the whole trip moves, every day re-dated
+  const moved = reschedule(trip, 1, { start: '2026-11-20' })
+  assert.equal(moved.startDate, '2026-11-18')
+  assert.deepEqual(moved.stops.flatMap(s => s.days.map(d => d.date)), ['2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21'])
+  // first stop one night longer: an empty day is added, the next stop slides by a day
+  const longer = reschedule(trip, 0, { nights: 3 })
+  assert.deepEqual(longer.stops[0].days.map(d => [d.date, d.items.length]), [['2026-11-12', 1], ['2026-11-13', 1], ['2026-11-14', 0]])
+  assert.equal(longer.stops[1].days[0].date, '2026-11-15')
+  // shorter: the last day is dropped
+  assert.equal(reschedule(trip, 1, { nights: 1 }).stops[1].days.length, 1)
+  console.log('ok reschedule')
+}
+
+{
+  const { insertStop, removeStop } = await import('./util.js')
+  const day = date => ({ date, items: [] })
+  const ist = { city: 'Istanbul', nights: 3, days: [day('2026-11-05'), day('2026-11-06'), day('2026-11-07')] }
+  const trip = { startDate: '2026-11-05', stops: [ist] }
+  const bursa = { city: 'Bursa', nights: 1 } // not planned yet: no days
+  const after = insertStop(trip, 0, bursa, false)
+  assert.deepEqual([after.startDate, after.stops.map(s => s.city)], ['2026-11-05', ['Istanbul', 'Bursa']])
+  assert.deepEqual(after.stops[0].days.map(d => d.date), ['2026-11-05', '2026-11-06', '2026-11-07']) // Istanbul keeps its dates
+  const before = insertStop(trip, 0, bursa, true)
+  assert.equal(before.startDate, '2026-11-04') // Bursa on the 4th, Istanbul still 5-7
+  assert.equal(before.stops[1].days[0].date, '2026-11-05')
+  assert.deepEqual(removeStop(before, 0), { ...trip, stops: [ist] }) // back to how it was
+  const three = insertStop(after, 1, { city: 'Izmir', nights: 2, days: [day('x'), day('y')] }, false)
+  assert.deepEqual(removeStop(three, 1).stops[1].days.map(d => d.date), ['2026-11-08', '2026-11-09']) // Izmir moves up to close the gap
+  console.log('ok stops')
+}
+
+{
+  const { arcs } = await import('./util.js')
+  const line = arcs([[0, 0], [10, 0]], 4)
+  assert.deepEqual([line[0], line.at(-1)], [[0, 0], [10, 0]]) // ends on the stops
+  assert.equal(line.length, 5)
+  assert.ok(line[2][1] > 0) // bowed to the left of travel (north when heading east)
+  console.log('ok arcs')
+}

@@ -3,7 +3,11 @@ mod places;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
+  let builder = tauri::Builder::default();
+  // Android: native Google sign-in (Credential Manager). Desktop keeps its own loopback flow (oauth.rs).
+  #[cfg(mobile)]
+  let builder = builder.plugin(tauri_plugin_google_auth::init());
+  builder
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_http::init())
     .invoke_handler(tauri::generate_handler![places::places_available, places::places_autocomplete, places::places_details, places::places_info, oauth::oauth_listen])

@@ -16,14 +16,14 @@ const tripBrief = t =>
 export async function suggestStops(settings, { region, days, lang, pace, interests }) {
   const { text } = await ask(settings, {
     system: system(lang),
-    prompt: `Plan where to stay for "${region}" over ${days} nights. Pace: ${pace}. Interests: ${interests || 'general'}.
-- If "${region}" is a single city or town, return exactly ONE stop: that place, with all ${days} nights. Do not add other cities, not even day trips.
-- If it is a region, island or country, choose a few cities in it, each close to the previous one (at most about 2 hours by train or car), in an order that never doubles back. Prefer fewer, longer stops: usually 2 nights or more each, more on a relaxed pace.
-Return {"stops":[{"city":string,"country":string,"nights":integer>=1}]} in travel order; nights must sum to ${days}.`,
+    prompt: `Plan where to stay for "${region}" over ${days} days (counting the first and the last day). Pace: ${pace}. Interests: ${interests || 'general'}.
+- If "${region}" is a single city or town, return exactly ONE stop: that place, with all ${days} days. Do not add other cities, not even day trips.
+- If it is a region, island or country, choose a few cities in it, each close to the previous one (at most about 2 hours by train or car), in an order that never doubles back. Prefer fewer, longer stops: usually 2 days or more each, more on a relaxed pace.
+Return {"stops":[{"city":string,"country":string,"days":integer>=1}]} in travel order; days must sum to ${days}.`,
   })
   const raw = parseJson(text).stops
   if (!Array.isArray(raw) || !raw.length) throw new Error('bad-json')
-  const stops = raw.map(s => ({ city: s.city, country: s.country, nights: Math.max(1, s.nights | 0) }))
+  const stops = raw.map(s => ({ city: s.city, country: s.country, nights: Math.max(1, (s.days ?? s.nights) | 0) })) // `nights` holds days (see stopOffsets)
   // The AI sometimes miscounts: the last stop absorbs the difference so the trip keeps its length.
   const last = stops.at(-1)
   last.nights = Math.max(1, last.nights + days - stops.reduce((n, s) => n + s.nights, 0))
@@ -34,7 +34,7 @@ Return {"stops":[{"city":string,"country":string,"nights":integer>=1}]} in trave
 export async function suggestDestinations(settings, { interests, month, nights, lang }) {
   const { text } = await ask(settings, {
     system: system(lang),
-    prompt: `Suggest 4 varied destinations (a region, island or city) for a ${nights}-night trip starting in ${month}. Interests: ${interests || 'general'}. They must suit that season.
+    prompt: `Suggest 4 varied destinations (a region, island or city) for a ${nights}-day trip starting in ${month}. Interests: ${interests || 'general'}. They must suit that season.
 Return {"ideas":[{"name":string,"country":string,"why":string (one short sentence)}]}.`,
   })
   const { ideas } = parseJson(text)
@@ -57,7 +57,7 @@ export async function planStop(settings, trip, idx) {
   }
   const { text } = await ask(settings, {
     system: system(lang),
-    prompt: `Trip stop ${idx + 1} of ${trip.stops.length}: ${stop.city}, ${stop.country}. ${stop.nights} night(s), arriving ${from}.
+    prompt: `Trip stop ${idx + 1} of ${trip.stops.length}: ${stop.city}, ${stop.country}. ${stop.nights} day(s), from ${from} to ${addDays(from, stop.nights - 1)}.
 Previous stop: ${trip.stops[idx - 1]?.city || 'none (trip start)'}. Next stop: ${trip.stops[idx + 1]?.city || 'none (trip end)'}.
 ${tripBrief(trip)}
 Return:

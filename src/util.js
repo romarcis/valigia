@@ -5,6 +5,8 @@ export const addDays = (iso, n) => {
 }
 
 // Day offset of each stop from trip start.
+// Day offset of each stop from the trip start. A stop's `nights` field holds its number of DAYS (the name is
+// kept for saved trips): stops follow one another, the next one starting the day after the last day of this one.
 export const stopOffsets = trip => trip.stops.reduce((acc, s, i) => [...acc, i ? acc[i - 1] + trip.stops[i - 1].nights : 0], [])
 
 // Walking minutes between two {lat,lng}: straight-line distance x1.3 for street detours, at 4.8 km/h.
@@ -248,6 +250,8 @@ export function dayTimes(stop, d, start) {
     const rule = p ? { min: p.minutes || 60 } : { ...breakRule(it.place), ...(it.minutes && { min: it.minutes }) }
     if (rule.from && cursor < rule.from) cursor = rule.from
     cursor = Math.ceil(cursor / 5) * 5
+    // a time the traveller set on the spot (running late, or early): this item starts then, the rest follows
+    if (/^\d{1,2}:\d{2}$/.test(it.at || '')) cursor = toMin(it.at)
     const at = cursor
     cursor += rule.min
     if (point?.lat != null) last = point
@@ -304,3 +308,57 @@ export function toAmount(v) {
 // A fresh ticket search replaces the saved one, unless it found no prices where the saved one had some.
 export const keepTicket = (old, fresh) => !!old?.prices?.length && !fresh.prices.length && fresh.needed !== false
 
+// A stop's arrival day or length changed: { start } moves the whole trip so this stop begins that day
+// (stops follow one another); { nights } resizes the stop, adding empty days or dropping its last ones
+// (their places go back to the unscheduled list), and the stops after it slide. Every day is re-dated.
+export function reschedule(trip, idx, { start, nights }) {
+  let t = trip
+  if (start) t = { ...t, startDate: addDays(start, -stopOffsets(t)[idx]) }
+  if (nights >= 1) {
+    t = { ...t, stops: t.stops.map((s, i) => {
+      if (i !== idx) return s
+      const days = (s.days || []).slice(0, nights)
+      while (s.days && days.length < nights) days.push({ title: '', items: [] })
+      return { ...s, nights, days }
+    }) }
+  }
+  return redate(t)
+}
+
+// Every day of every stop gets its date again from the trip start and the stops' lengths.
+function redate(t) {
+  const at = stopOffsets(t)
+  return { ...t, stops: t.stops.map((s, i) => (s.days ? { ...s, days: s.days.map((d, k) => ({ ...d, date: addDays(t.startDate, at[i] + k) })) } : s)) }
+}
+
+// A new stop next to stop idx. The stops already planned keep their dates: one put before the first stop
+// moves the trip start earlier, any other pushes only the stops after it later.
+export function insertStop(trip, idx, stop, before) {
+  const at = before ? idx : idx + 1
+  const stops = [...trip.stops.slice(0, at), stop, ...trip.stops.slice(at)]
+  return redate({ ...trip, startDate: at === 0 ? addDays(trip.startDate, -stop.nights) : trip.startDate, stops })
+}
+
+// Stop idx leaves the trip. The first one leaving moves the start to the next stop's first day (its dates stay);
+// otherwise the stops after it move earlier to close the gap.
+export function removeStop(trip, idx) {
+  const startDate = idx === 0 ? addDays(trip.startDate, trip.stops[0].nights) : trip.startDate
+  return redate({ ...trip, startDate, stops: trip.stops.filter((_, i) => i !== idx) })
+}
+
+
+// The trip's line through its stops as gentle arcs (a journey, not a road): a quadratic curve between each
+// pair of [lng, lat] points, bowed to the left of the direction of travel by a fifth of the distance.
+export function arcs(points, steps = 24) {
+  if (points.length < 2) return points
+  const out = [points[0]]
+  for (let k = 1; k < points.length; k++) {
+    const [x0, y0] = points[k - 1], [x1, y1] = points[k]
+    const cx = (x0 + x1) / 2 - (y1 - y0) * 0.2, cy = (y0 + y1) / 2 + (x1 - x0) * 0.2
+    for (let i = 1; i <= steps; i++) {
+      const s = i / steps, u = 1 - s
+      out.push([u * u * x0 + 2 * u * s * cx + s * s * x1, u * u * y0 + 2 * u * s * cy + s * s * y1])
+    }
+  }
+  return out
+}

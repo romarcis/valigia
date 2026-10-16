@@ -115,7 +115,7 @@ export default function NewTrip({ t, settings, onCreate, onCancel }) {
           <div className="field"><span>{t.qHowLong}</span>
             <Stepper label={t.qHowLong} value={f.nights} min={1} max={60} onChange={v => set({ nights: v })} unit={n => t.nights(n).replace(/^\d+\s*/, '')} />
           </div>
-          {f.startDate && <p className="hint">{t.backOn(fmt(addDays(f.startDate, f.nights)))}</p>}
+          {f.startDate && <p className="hint">{t.backOn(fmt(addDays(f.startDate, f.nights - 1)))}</p>}
         </section>
       )}
 

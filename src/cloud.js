@@ -8,7 +8,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { http, openExternal } from './net.js'
 import { getFirestore, doc, getDoc, setDoc, getDocs, collection, deleteDoc, deleteField } from 'firebase/firestore'
-import config, { googleDesktop } from './firebase-config.js'
+import config, { googleDesktop, googleWebClientId } from './firebase-config.js'
+import { signIn as nativeGoogleSignIn } from '@choochmeque/tauri-plugin-google-auth-api'
 import { log } from './net.js'
 
 // Accounts and sync are off until the Firebase config is filled in.
@@ -42,17 +43,28 @@ export async function aiToken() {
 }
 
 // ---- Google sign-in
-// In the app: system browser + loopback redirect + PKCE (Google blocks sign-in inside embedded webviews),
-// then the ID token signs in to Firebase. In a plain browser (npm run dev) the Firebase popup does it.
+// Windows app: system browser + loopback redirect + PKCE (Google blocks sign-in inside embedded webviews).
+// Android: the system Google account picker (Credential Manager), for the project's web client.
+// Either way the ID token signs in to Firebase. In a plain browser (npm run dev) the Firebase popup does it.
 const inTauri = '__TAURI_INTERNALS__' in window
 const isAndroid = /Android/i.test(navigator.userAgent)
-export const googleAvailable = cloudEnabled && !isAndroid && (!inTauri || !!googleDesktop.clientId)
+export const googleAvailable = cloudEnabled && (isAndroid ? !!googleWebClientId : !inTauri || !!googleDesktop.clientId)
 
 const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 const fail = (code, msg = code) => Object.assign(new Error(msg), { code })
 
 export async function signInGoogle() {
   if (!inTauri) return signInWithPopup(auth, new GoogleAuthProvider(), browserPopupRedirectResolver)
+  if (isAndroid) {
+    let tok
+    try {
+      tok = await nativeGoogleSignIn({ clientId: googleWebClientId, scopes: ['openid', 'email', 'profile'] })
+    } catch (e) {
+      log('error', `Google: ${e}`)
+      throw fail(/cancel/i.test(String(e)) ? 'auth/cancelled' : 'auth/google', String(e))
+    }
+    return signInWithCredential(auth, GoogleAuthProvider.credential(tok.idToken))
+  }
 
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)))
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))

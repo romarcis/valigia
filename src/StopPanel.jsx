@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   ArrowClockwiseIcon, ArrowSquareOutIcon, BedIcon, TrashIcon, HourglassIcon, ForkKnifeIcon, DotsThreeVerticalIcon,
-  PersonSimpleWalkIcon, TrainSimpleIcon, TrainIcon, BusIcon, TramIcon, CarIcon, BoatIcon, AirplaneTiltIcon, TaxiIcon, PathIcon,
+  CaretDownIcon, ArrowCounterClockwiseIcon, PersonSimpleWalkIcon, TrainSimpleIcon, TrainIcon, BusIcon, TramIcon, CarIcon, BoatIcon, AirplaneTiltIcon, TaxiIcon, PathIcon,
+  PlusIcon,
+  XIcon,
 } from '@phosphor-icons/react'
 import { stopOffsets, addDays, walkMinutes, dayNumbers, dayTone, dayTimes, dayStart, stayMinutes } from './util.js'
 import { canSearch } from './ai.js'
@@ -117,6 +119,45 @@ function PlaceMenu({ t, lang, days, inkOf, x, y, onAdd, onRemove, onClose }) {
   )
 }
 
+// The trip's ⋮ menu in the stop head: add a stop, re-plan this one, remove it, delete the trip.
+// The last three ask first, inside the menu; removing the only stop deletes the trip, and says so.
+function StopMenu({ t, city, single, x, y, busy, onAdd, onReplan, onRemoveStop, onDeleteTrip, onClose }) {
+  const ref = useRef(null)
+  const [ask, setAsk] = useState(null) // 'replan' | 'stop' | 'trip'
+  useEffect(() => {
+    ref.current?.querySelector('button')?.focus()
+    const close = e => { if (!ref.current?.contains(e.target)) onClose() }
+    const esc = e => e.key === 'Escape' && onClose()
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', esc) }
+  }, [onClose, ask])
+  const wipes = ask === 'trip' || (ask === 'stop' && single)
+  const confirm = {
+    replan: [t.replanText(city), t.replanConfirm, onReplan],
+    stop: single ? [t.lastStopText(city), t.confirmDelete, onDeleteTrip] : [t.removeStopText(city), t.confirmRemoveStop(city), onRemoveStop],
+    trip: [t.deleteTripText, t.confirmDelete, onDeleteTrip],
+  }[ask]
+  return (
+    <div ref={ref} className="ctx stop-menu" role="menu" style={{ left: Math.max(8, Math.min(x, window.innerWidth - 270)), top: Math.max(8, Math.min(y, window.innerHeight - 240)) }}>
+      {confirm ? (
+        <>
+          <p className="ctx-note">{confirm[0]}</p>
+          <button role="menuitem" className={wipes || ask === 'stop' ? 'ctx-danger' : 'ctx-strong'} onClick={() => { confirm[2](); onClose() }}>{confirm[1]}</button>
+          <button role="menuitem" onClick={() => setAsk(null)}>{t.cancel}</button>
+        </>
+      ) : (
+        <>
+          <button role="menuitem" className="ctx-add" onClick={() => { onAdd(); onClose() }}><PlusIcon size={16} aria-hidden /> {t.addStop}</button>
+          <button role="menuitem" className="ctx-add" disabled={busy} onClick={() => setAsk('replan')}><ArrowClockwiseIcon size={16} aria-hidden /> {t.replanStop}</button>
+          <button role="menuitem" className="ctx-danger ctx-add" onClick={() => setAsk('stop')}><XIcon size={16} aria-hidden /> {t.removeStopShort}</button>
+          <button role="menuitem" className="ctx-danger ctx-add" onClick={() => setAsk('trip')}><TrashIcon size={16} aria-hidden /> {t.deleteTrip}</button>
+        </>
+      )}
+    </div>
+  )
+}
+
 const menuAt = e => {
   if (e.type === 'contextmenu') return { x: e.clientX || 24, y: e.clientY || 24 }
   const r = e.currentTarget.getBoundingClientRect()
@@ -151,12 +192,19 @@ function Stay({ t, minutes, onSet }) {
   )
 }
 
-function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVenue, onGo, onStart, onStay, inkOf, day, setDay }) {
+function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVenue, onGo, onStart, onStay, onTime, inkOf, day, setDay }) {
   const { places: tags, venues: venueTags } = dayNumbers(stop)
   const [editing, setEditing] = useState(null) // `${day}:${item}` whose venue is being chosen
   const drag = useRef(null) // {d, i} of the item being dragged
   const [drop, setDrop] = useState(null) // {d, i} insert position under the pointer
   const [menu, setMenu] = useState(null) // {at: {d, i}, x, y}
+
+  // Another day: its list starts from the top, right under the sticky day chips (only if we had scrolled past it).
+  useEffect(() => {
+    const list = document.getElementById('day-panel'), chips = document.querySelector('.day-tabs'), panel = list?.closest('.panel')
+    const off = list && chips && list.getBoundingClientRect().top - chips.getBoundingClientRect().bottom
+    if (panel && off < 0) panel.scrollBy({ top: off })
+  }, [day])
 
   const overRow = (e, d, i) => {
     if (!drag.current) return
@@ -179,19 +227,19 @@ function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVen
         {stop.days.map((d, i) => (
           <button
             key={i} role="tab" aria-selected={i === day} aria-controls="day-panel"
-            className={'day-tab' + (i === day ? ' is-on' : '') + (drop?.d === i && i !== day ? ' is-drop' : '')}
+            aria-label={`${t.day} ${i + 1}, ${fmtDate(lang, d.date, { weekday: 'long', day: 'numeric', month: 'long' })}`}
+            className={'chip day-tab' + (i === day ? ' is-active' : '') + (drop?.d === i && i !== day ? ' is-drop' : '')}
             style={{ '--ink': inkOf(i).bg, '--on-ink': inkOf(i).fg }}
             onClick={() => setDay(i)}
             onDragOver={e => { if (drag.current && drag.current.d !== i) { e.preventDefault(); if (drop?.d !== i) setDrop({ d: i, i: d.items.length }) } }}
             onDragLeave={() => setDrop(x => (x?.d === i ? null : x))}
             onDrop={e => { finish(e); setDay(i) }}
           >
-            <b>{t.day} {i + 1}</b>
-            <span>{fmtDate(lang, d.date, { weekday: 'short', day: 'numeric' })}</span>
+            <span className="chip-num" aria-hidden>{i + 1}</span>
+            <span className="chip-city" aria-hidden>{fmtDate(lang, d.date, { weekday: 'short', day: 'numeric' })}</span>
           </button>
         ))}
       </div>
-      <p className="hint">{t.transferNote}</p>
       <ol className="days" id="day-panel" role="tabpanel">
         {stop.days.map((d, i) => {
           if (i !== day) return null
@@ -205,13 +253,12 @@ function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVen
           return (
             <li key={i} className="day">
               <div className="day-head">
-                <h3><span className="day-swatch" style={{ background: inkOf(i).bg }} aria-hidden /><span className="day-n">{t.day} {i + 1}</span> <span className="muted">{fmtDate(lang, d.date)}</span></h3>
+                <h3><span className="day-swatch" style={{ background: inkOf(i).bg }} aria-hidden /><span className="day-n">{t.day} {i + 1}</span></h3>
                 <label className="day-start">
                   <span>{t.startAt}</span>
                   <input type="time" step="300" value={dayStart(d).padStart(5, '0')} onChange={e => e.target.value && onStart(i, e.target.value)} />
                 </label>
               </div>
-              <p className="day-title">{d.title}</p>
               <ol
                 className={'timeline' + (drop?.d === i && drop.i === d.items.length ? ' drop-end' : '')}
                 onDragOver={e => { if (drag.current && e.target === e.currentTarget) { e.preventDefault(); setDrop({ d: i, i: d.items.length }) } }}
@@ -229,6 +276,7 @@ function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVen
                   if (located) last = point
                   const key = `${i}:${j}`
                   const cls = [
+                    idx == null && 'is-break', // lunch, dinner, coffee…: not a sight, drawn softer
                     (idx != null ? idx === picked : key === picked) && 'is-picked',
                     drop?.d === i && drop.i === j && 'drop-before',
                     drag.current?.d === i && drag.current.i === j && 'is-dragging',
@@ -241,7 +289,15 @@ function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVen
                       onContextMenu={e => { e.preventDefault(); setMenu({ at: { d: i, i: j }, x: e.clientX || 24, y: e.clientY || e.currentTarget.getBoundingClientRect().bottom }) }}
                       title={t.dragHint}
                     >
-                      <time>{clock?.times[j] ?? it.time}</time>
+                      <div className="tl-when">
+                        {/* the time is editable: set when you really get there, the rest of the day re-times from it */}
+                        <input
+                          type="time" step="300" className={'tl-time' + (it.at ? ' is-fixed' : '')} draggable={false}
+                          aria-label={t.timeOf(it.place)} title={t.timeEdit} value={(clock?.times[j] ?? it.time ?? '').padStart(5, '0')}
+                          onChange={e => e.target.value && onTime(i, j, e.target.value)}
+                        />
+                        {it.at && <button type="button" className="tl-auto" aria-label={t.timeAutoHint} title={t.timeAutoHint} onClick={() => onTime(i, j, null)}><ArrowCounterClockwiseIcon size={15} weight="bold" aria-hidden /></button>}
+                      </div>
                       <div>
                         {idx != null ? (
                           <button className="tl-place" aria-pressed={idx === picked} onClick={() => onPick(idx)}>
@@ -507,15 +563,40 @@ function Fetch({ t, label, hint, Icon, onRun, busy, err, warn }) {
   )
 }
 
-export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab, day, setDay, picked, onPick, onAddPlace, onSchedule, onDropPlace, onStart, onStay, onMove, onRemove, onInsert, onVenue, onGo, busy, errors, settings, run, onSaveHotel, onDelete }) {
+// A stop added to a trip already made: where, how many days, before or after the stop on screen.
+function AddStop({ t, current, onAdd, onCancel }) {
+  const [f, setF] = useState({ city: '', country: current.country || '', nights: 1, before: false })
+  const set = patch => setF(x => ({ ...x, ...patch }))
+  return (
+    <form className="add-stop" onSubmit={e => { e.preventDefault(); if (f.city.trim()) onAdd({ ...f, city: f.city.trim(), country: f.country.trim() }) }}>
+      <h3>{t.newStop}</h3>
+      <div className="add-stop-row">
+        <label className="field"><span>{t.formCity}</span><input value={f.city} onChange={e => set({ city: e.target.value })} required autoFocus /></label>
+        <label className="field"><span>{t.formCountry}</span><input value={f.country} onChange={e => set({ country: e.target.value })} /></label>
+        <label className="field field-num"><span>{t.formNights}</span><input type="number" min="1" max="30" value={f.nights} onChange={e => set({ nights: Math.max(1, +e.target.value || 1) })} /></label>
+      </div>
+      <div className="seg" role="radiogroup" aria-label={t.newStop}>
+        <button type="button" role="radio" aria-checked={!f.before} onClick={() => set({ before: false })}>{t.afterStop(current.city)}</button>
+        <button type="button" role="radio" aria-checked={f.before} onClick={() => set({ before: true })}>{t.beforeStop(current.city)}</button>
+      </div>
+      <div className="row">
+        <button className="btn btn-primary" disabled={!f.city.trim()}>{t.addAndPlan}</button>
+        <button type="button" className="btn btn-quiet" onClick={onCancel}>{t.cancel}</button>
+      </div>
+    </form>
+  )
+}
+
+export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab, day, setDay, picked, onPick, onAddPlace, onSchedule, onDropPlace, onStart, onStay, onTime, onMove, onRemove, onInsert, onVenue, onGo, busy, errors, settings, run, onSaveHotel, onDelete, onDates, onAddStop, onRemoveStop }) {
   const stop = trip.stops[active]
   const lang = trip.lang
   const from = addDays(trip.startDate, stopOffsets(trip)[active])
-  const to = addDays(from, stop.nights)
+  const to = addDays(from, stop.nights - 1) // last day of the stop
   const k = job => `${stop.id}:${job}`
   const tabs = [['days', t.tabDays], ['places', t.tabPlaces], ['moves', t.tabMoves]]
   const noSearch = !canSearch(settings) ? t.noSearch : null
-  const [armed, setArmed] = useState(false) // delete needs a second, deliberate press
+  const [tripMenu, setTripMenu] = useState(null) // {x, y} of the open ⋮ menu
+  const [adding, setAdding] = useState(false) // the new-stop form is open
 
   // A place picked on the map scrolls into view in whichever list is showing.
   useEffect(() => {
@@ -523,8 +604,17 @@ export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab
     document.querySelector(`.tabpanel [data-place="${picked}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [picked, tab])
 
+  // Heights of the sticky stop head and tab bar, so the layers below them stick right under (phone layout).
+  const root = useRef(null)
+  useLayoutEffect(() => {
+    const el = root.current, head = el.querySelector('.stop-head'), bar = el.querySelector('.tabs')
+    const ro = new ResizeObserver(() => { el.style.setProperty('--head-h', `${head.getBoundingClientRect().height}px`); el.style.setProperty('--tabs-h', `${bar.getBoundingClientRect().height}px`) })
+    ro.observe(head); ro.observe(bar)
+    return () => ro.disconnect()
+  }, [])
+
   return (
-    <div className="stop-panel">
+    <div className="stop-panel" ref={root}>
       <nav className="rail" aria-label={t.formWhere}>
         <ol>
           {trip.stops.map((s, i) => (
@@ -546,15 +636,41 @@ export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab
       <header className="stop-head">
         <span className="stop-num" aria-hidden>{String(active + 1).padStart(2, '0')}</span>
         <div>
-          <h1>{stop.city}</h1>
-          <p>{fmtDate(lang, from, { day: 'numeric', month: 'short' })} – {fmtDate(lang, to, { day: 'numeric', month: 'short' })} · {t.nights(stop.nights)}</p>
+          <h1>{stop.city}{trip.stops.length > 1 && <CaretDownIcon className="stop-caret" size={22} weight="bold" aria-hidden />}</h1>
+          {/* first day and number of days are editable (native pickers under the text); the last day follows */}
+          <p className="stop-dates">
+            <label className="stop-edit">
+              <span>{fmtDate(lang, from, { day: 'numeric', month: 'short' })}</span>
+              <input type="date" aria-label={t.arrival} value={from} onClick={e => e.currentTarget.showPicker?.()} onChange={e => e.target.value && onDates({ start: e.target.value })} />
+            </label>
+            {' – '}{fmtDate(lang, to, { day: 'numeric', month: 'short' })}{' · '}
+            <label className="stop-edit">
+              <span>{t.nights(stop.nights)}</span>
+              <select aria-label={t.formNights} value={stop.nights} onChange={e => onDates({ nights: +e.target.value })}>
+                {Array.from({ length: 30 }, (_, i) => i + 1).map(n => <option key={n} value={n}>{t.nights(n)}</option>)}
+              </select>
+            </label>
+          </p>
         </div>
-        <button className="icon-btn icon-btn-ink" aria-label={t.replan} title={t.replan} onClick={() => run('plan')} disabled={busy[k('plan')]}>
-          <ArrowClockwiseIcon size={20} aria-hidden />
+        {/* phone: the head is the stop switcher (the stop chips are hidden there); a native picker over it */}
+        {trip.stops.length > 1 && (
+          <select className="stop-pick" aria-label={t.formWhere} value={active} onChange={e => onSelect(+e.target.value)}>
+            {trip.stops.map((s, i) => <option key={s.id} value={i}>{String(i + 1).padStart(2, '0')} · {s.city}</option>)}
+          </select>
+        )}
+        <button className="icon-btn icon-btn-ink" aria-label={t.stopMenu} title={t.stopMenu} aria-haspopup="menu" aria-expanded={!!tripMenu} onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setTripMenu({ x: r.right - 260, y: r.bottom + 6 }) }}>
+          <DotsThreeVerticalIcon size={22} weight="bold" aria-hidden />
         </button>
       </header>
+      {tripMenu && (
+        <StopMenu
+          t={t} city={stop.city} single={trip.stops.length === 1} {...tripMenu} busy={busy[k('plan')]}
+          onAdd={() => setAdding(true)} onReplan={() => run('plan')} onRemoveStop={onRemoveStop} onDeleteTrip={onDelete} onClose={() => setTripMenu(null)}
+        />
+      )}
+      {adding && <AddStop t={t} current={stop} onCancel={() => setAdding(false)} onAdd={x => { setAdding(false); onAddStop(x) }} />}
       {stop.summary && <p className="stop-summary">{stop.summary}</p>}
-      {stop.planned && <HotelBox key={stop.id} t={t} stop={stop} onSave={onSaveHotel} />}
+      {stop.planned && tab === 'days' && <HotelBox key={stop.id} t={t} stop={stop} onSave={onSaveHotel} />}
 
       <div className="tabs" role="tablist">
         {tabs.map(([id, label]) => (
@@ -568,7 +684,7 @@ export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab
           busy[k('plan')] ? <><p className="muted">{t.planningStop(stop.city)}</p><Skeleton rows={8} /></>
           : errors[k('plan')] ? <div className="fetch"><p className="error" role="alert">{errors[k('plan')]}</p><button className="btn btn-ink" onClick={() => run('plan')}>{t.retry}</button></div>
           : !stop.planned ? <div className="fetch"><button className="btn btn-ink" onClick={() => run('plan')}>{t.replan}</button></div>
-          : tab === 'days' ? <Days t={t} stop={stop} lang={lang} picked={picked} onPick={onPick} onMove={onMove} onRemove={onRemove} onInsert={onInsert} onVenue={onVenue} onGo={onGo} onStart={onStart} onStay={onStay} inkOf={d => dayTone(inks[active % inks.length], d, stop.days.length)} day={Math.min(day, stop.days.length - 1)} setDay={setDay} /> : <Places t={t} stop={stop} lang={lang} picked={picked} onPick={onPick} inkOf={d => dayTone(inks[active % inks.length], d, stop.days.length)} onAddPlace={onAddPlace} onSchedule={onSchedule} onDropPlace={onDropPlace} />
+          : tab === 'days' ? <Days t={t} stop={stop} lang={lang} picked={picked} onPick={onPick} onMove={onMove} onRemove={onRemove} onInsert={onInsert} onVenue={onVenue} onGo={onGo} onStart={onStart} onStay={onStay} onTime={onTime} inkOf={d => dayTone(inks[0], d, stop.days.length)} day={Math.min(day, stop.days.length - 1)} setDay={setDay} /> : <Places t={t} stop={stop} lang={lang} picked={picked} onPick={onPick} inkOf={d => dayTone(inks[0], d, stop.days.length)} onAddPlace={onAddPlace} onSchedule={onSchedule} onDropPlace={onDropPlace} />
         )}
 
         {tab === 'moves' && (stop.moves && !busy[k('moves')] ? (
@@ -584,11 +700,6 @@ export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab
         ) : <Fetch t={t} label={t.findMoves} hint={t.movesHint} Icon={PathIcon} onRun={() => run('moves')} busy={busy[k('moves')]} err={errors[k('moves')]} warn={noSearch} />)}
       </div>
 
-      {tab === 'days' && <footer className="panel-foot">
-        <button className={'btn ' + (armed ? 'btn-danger' : 'btn-danger-quiet')} onClick={() => (armed ? onDelete() : setArmed(true))} onBlur={() => setArmed(false)}>
-          <TrashIcon size={16} aria-hidden /> {armed ? t.confirmDelete : t.deleteTrip}
-        </button>
-      </footer>}
     </div>
   )
 }

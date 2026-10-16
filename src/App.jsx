@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { GearSixIcon, PlusIcon, MapTrifoldIcon, ListBulletsIcon } from '@phosphor-icons/react'
+import { GearSixIcon, PlusIcon } from '@phosphor-icons/react'
 import MapView from './MapView.jsx'
 import Settings from './Settings.jsx'
 import { cleanSettings } from './sync.js'
+import { reschedule, insertStop, removeStop } from './util.js'
+import { officialSite } from './wiki.js'
 import NewTrip from './NewTrip.jsx'
 import StopPanel from './StopPanel.jsx'
 import { STRINGS, errorText } from './i18n.js'
@@ -12,7 +14,6 @@ import { keepTicket } from './util.js'
 import { nextSlot } from './util.js'
 import { moveItem, removeItem, insertBreak, renumber, routeUpTo, dayNumbers, dropUnlocated, dayTone, INKS } from './util.js'
 import { log } from './net.js'
-import LogPanel, { useLog } from './LogPanel.jsx'
 import PackingLoader from './PackingLoader.jsx'
 import PlaceCard from './PlaceCard.jsx'
 import { walkRoute, driveLegs } from './routing.js'
@@ -60,19 +61,16 @@ export default function App() {
   const [dayZoom, setDayZoom] = useState(0) // bumped by a click on a day tab: the map re-frames that day even if it was already open
   // A day tab: show that day and frame its walk on the map (dropping any picked place and the overview).
   const openDay = useCallback(d => { setDay(d); setPicked(null); setOverview(false); setDayZoom(z => z + 1) }, [])
-  const [overview, setOverview] = useState(true)
+  const [overview, setOverview] = useState(false) // whole-trip map; its toggle on the map was removed, kept for picks that reset it
   const [picked, setPicked] = useState(null) // index into the active stop's places, or a meal venue's `${day}:${item}`
   const [card, setCard] = useState(false) // the picked place's card, opened from the map
   const [busy, setBusy] = useState({}) // `${stopId}:${job}` -> true
   const [errors, setErrors] = useState({}) // `${stopId}:${job}` -> message
-  const [showLog, setShowLog] = useState(false)
   const [packing, setPacking] = useState(null) // { city, step, total } while stops are being planned
   // The suitcase is packed: ring the desk bell when the loader closes.
   const wasPacking = useRef(false)
   useEffect(() => { if (wasPacking.current && !packing) ring(); wasPacking.current = !!packing }, [packing])
   const cloud = useCloud({ settings, setSettings, trips, setTrips: setTripsRaw })
-  const logEntries = useLog()
-  const logErrors = logEntries.filter(e => e.level === 'error').length
 
   const t = STRINGS[settings.lang] || STRINGS.it
   const trip = trips.find(x => x.id === currentId) || trips[0] || null
@@ -81,8 +79,9 @@ export default function App() {
   useEffect(() => { document.documentElement.lang = settings.lang }, [settings.lang])
   useEffect(() => { if (trip && active >= trip.stops.length) setActive(0) }, [trip, active])
 
-  const updateStop = useCallback((tripId, stopId, patch) => {
-    setTrips(ts => ts.map(tr => (tr.id !== tripId ? tr : { ...tr, stops: tr.stops.map(s => (s.id === stopId ? { ...s, ...patch } : s)) })))
+  // patch: fields to set on the stop; or, with editPlaces, a function applied to its current places (no stale copy)
+  const updateStop = useCallback((tripId, stopId, patch, editPlaces) => {
+    setTrips(ts => ts.map(tr => (tr.id !== tripId ? tr : { ...tr, stops: tr.stops.map(s => (s.id !== stopId ? s : editPlaces ? { ...s, places: editPlaces(s.places) } : { ...s, ...patch })) })))
   }, [setTrips])
 
   // Runs one AI job for one stop, tracking busy/error state per stop+job.
@@ -111,7 +110,7 @@ export default function App() {
     setCurrentId(tr.id)
     setActive(0)
     setTab('days')
-    setOverview(true)
+    setOverview(false)
     setView('trip')
     // Sequential: each stop's prompt mentions its neighbours, and it keeps rate limits calm.
     for (let i = 0; i < tr.stops.length; i++) {
@@ -150,6 +149,7 @@ export default function App() {
   }
 
   const closeCard = useCallback(() => setCard(false), [])
+  useEffect(() => { if (view !== 'trip') setCard(false) }, [view]) // New trip / Settings close the place card
 
   // Entrance ticket of the place whose card is open: searched once, then kept with the place (and synced).
   const [ticketJob, setTicketJob] = useState({}) // place name -> 'busy' | error message
@@ -175,6 +175,12 @@ export default function App() {
   useEffect(() => {
     if (cardPlace && !cardPlace.ticket && !ticketJob[cardPlace.name]) loadTicket(trip, stop, active, cardPlace)
   }, [cardPlace, ticketJob, loadTicket, trip, stop, active])
+  // Its official website (Wikidata), looked up once and kept with the place ('' = it has none).
+  useEffect(() => {
+    if (!cardPlace?.url || cardPlace.site !== undefined) return
+    const { name } = cardPlace, tripId = trip.id, stopId = stop.id
+    officialSite(cardPlace.url).then(site => updateStop(tripId, stopId, null, ps => ps.map(p => (p.name === name ? { ...p, site } : p))), e => log('error', `${name}: sito ufficiale non disponibile (${e.message})`))
+  }, [cardPlace, trip?.id, stop?.id, updateStop])
   const selectStop = useCallback(i => { setActive(i); setOverview(false); setPicked(null); setDay(0) }, [])
   // From the map: highlight the place and show the tab that lists it (Places only lists what the itinerary skips).
   const pickFromMap = useCallback(i => {
@@ -188,11 +194,11 @@ export default function App() {
   }, [stop])
   // From the itinerary or Luoghi: highlight the place and open its card (photo and description); a second click closes both.
   const pickFromList = useCallback(i => {
-    const off = picked === i
+    const off = picked === i && card // a second click on an open card closes it; on a closed one it reopens
     setPicked(off ? null : i)
     setCard(!off)
     setOverview(false)
-  }, [picked])
+  }, [picked, card])
   const places = useMemo(() => (overview || !stop?.places ? [] : stop.places), [overview, stop])
   // Day and number of each place: pins take that day's colour and its number within the day.
   const numbers = useMemo(() => (stop?.places ? dayNumbers(stop) : { places: [], venues: {} }), [stop])
@@ -250,21 +256,17 @@ export default function App() {
   })), [overview, stop, picked, day])
 
   return (
-    <div className={`app view-${view}`} style={stop && view === 'trip' ? { '--ink': INKS[active % INKS.length].bg, '--on-ink': INKS[active % INKS.length].fg } : undefined}>
+    <div className={`app view-${cloud.needsAuth || cloud.user === undefined ? 'auth' : view}`} style={stop && view === 'trip' ? { '--ink': INKS[active % INKS.length].bg, '--on-ink': INKS[active % INKS.length].fg } : undefined}>
       <header className="appbar">
         <span className="wordmark">Valigia</span>
         {trips.length > 0 && view === 'trip' && (
-          <select className="trip-switch" aria-label={t.trips} value={trip?.id} onChange={e => { setCurrentId(e.target.value); setActive(0); setOverview(true) }}>
+          <select className="trip-switch" aria-label={t.trips} value={trip?.id} onChange={e => { setCurrentId(e.target.value); setActive(0); setOverview(false) }}>
             {trips.map(x => <option key={x.id} value={x.id}>{x.title}</option>)}
           </select>
         )}
         <span className="appbar-gap" />
         <button className="btn btn-on-navy" aria-label={t.newTrip} onClick={() => setView('new')} disabled={view === 'new'}>
           <PlusIcon size={18} weight="bold" aria-hidden /> <span className="hide-sm">{t.newTrip}</span>
-        </button>
-        <button className="icon-btn log-btn" aria-label={t.log} aria-pressed={showLog} title={t.log} onClick={() => setShowLog(v => !v)}>
-          <ListBulletsIcon size={22} aria-hidden />
-          {logErrors > 0 && <span className="log-badge">{logErrors}</span>}
         </button>
         <button className="icon-btn" aria-label={t.settings} aria-pressed={view === 'settings'} onClick={() => setView(view === 'settings' ? 'trip' : 'settings')}>
           <GearSixIcon size={22} aria-hidden />
@@ -309,6 +311,27 @@ onPick={pickFromList}
                   ? { places: stop.places.map((p, k) => (k === idx ? { ...p, minutes: min } : p)) }
                   : { days: stop.days.map((day, k) => (k !== d ? day : { ...day, items: day.items.map((x, n) => (n === j ? { ...x, minutes: min } : x)) })) })
               }}
+              onTime={(d, j, at) => updateStop(trip.id, stop.id, { days: stop.days.map((day, k) => (k !== d ? day : { ...day, items: day.items.map((x, n) => (n !== j ? x : at ? { ...x, at } : (({ at: _, ...rest }) => rest)(x))) })) })}
+              onAddStop={async ({ before, ...s }) => {
+                const ns = { ...s, id: newId() }
+                const tr = insertStop(trip, active, ns, before)
+                const at = tr.stops.indexOf(ns)
+                setTrips(ts => ts.map(x => (x.id === trip.id ? tr : x)))
+                setActive(at)
+                setDay(0)
+                log('ok', `${trip.title}: aggiunta la tappa ${s.city}`)
+                setPacking({ city: s.city, step: 1, total: 1 })
+                await run(tr, at, 'plan')
+                setPacking(null)
+              }}
+              onRemoveStop={() => {
+                log('ok', `${trip.title}: tolta la tappa ${stop.city}`)
+                setTrips(ts => ts.map(x => (x.id === trip.id ? removeStop(x, active) : x)))
+                setActive(a => Math.max(0, a - 1))
+                setDay(0)
+                setPicked(null)
+              }}
+              onDates={patch => setTrips(ts => ts.map(x => (x.id === trip.id ? reschedule(x, active, patch) : x)))}
               onStart={(d, time) => updateStop(trip.id, stop.id, { days: stop.days.map((day, k) => (k === d ? { ...day, start: time } : day)) })}
               onGo={(d, j, go) => updateStop(trip.id, stop.id, {
                 // j is the item the transfer leads to, or 'back' for the walk back to the hotel
@@ -349,26 +372,20 @@ onPick={pickFromList}
         </aside>
 
         <section className="map-wrap">
-          {card && !overview && stop?.places?.[picked] && (
+          {card && view === 'trip' && !overview && stop?.places?.[picked] && (
             <PlaceCard t={t} lang={trip.lang || settings.lang} place={stop.places[picked]}
               ticketLoading={ticketJob[stop.places[picked].name] === 'busy'}
               ticketError={typeof ticketJob[stop.places[picked].name] === 'string' && ticketJob[stop.places[picked].name] !== 'busy' ? ticketJob[stop.places[picked].name] : null}
               ticketKept={!!ticketJob[stop.places[picked].name]?.kept}
               onTicketRetry={() => loadTicket(trip, stop, active, stop.places[picked])}
-              currency={userCurrency(settings)} tag={tags[picked]} ink={dayTone(INKS[active % INKS.length], tags[picked]?.day ?? 0, stop.days.length)} onClose={closeCard} />
+              currency={userCurrency(settings)} tag={tags[picked]} ink={dayTone(INKS[0], tags[picked]?.day ?? 0, stop.days.length)} onClose={closeCard} />
           )}
-          {card && !overview && typeof picked === 'string' && venueAt(stop, picked) && (
+          {card && view === 'trip' && !overview && typeof picked === 'string' && venueAt(stop, picked) && (
             <PlaceCard t={t} lang={trip.lang || settings.lang} place={venueAt(stop, picked)} venue
               tag={numbers.venues[picked] && { n: numbers.venues[picked].n, day: +picked.split(':')[0] }}
-              ink={dayTone(INKS[active % INKS.length], +picked.split(':')[0], stop.days.length)} onClose={closeCard} />
+              ink={dayTone(INKS[0], +picked.split(':')[0], stop.days.length)} onClose={closeCard} />
           )}
-          {showLog && <LogPanel t={t} entries={logEntries} onClose={() => setShowLog(false)} />}
           <MapView stops={trip?.stops || []} active={active} places={places} tags={tags} venues={venues} hotel={overview ? null : stop?.hotel} routes={dayRoutes} focusDay={overview || picked != null ? null : day} dayZoom={dayZoom} dayFrame={!overview && picked == null && stop?.days?.[day] ? dayPoints(stop, stop.days[day]) : null} dayCount={stop?.days?.length || 1} inks={INKS} onStop={selectStop} overview={overview} selected={overview ? null : picked} onPick={pickFromMap} />
-          {trip && (
-            <button className="map-overview" aria-pressed={overview} onClick={() => setOverview(o => !o)}>
-              <MapTrifoldIcon size={18} aria-hidden /> {trip.title}
-            </button>
-          )}
         </section>
       </main>
     </div>

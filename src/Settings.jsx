@@ -1,4 +1,5 @@
 import { XIcon } from '@phosphor-icons/react'
+import LogPanel from './LogPanel.jsx'
 import { CURRENCIES, userCurrency } from './currency.js'
 
 export default function Settings({ t, settings, setSettings, cloud, onClose }) {
@@ -38,6 +39,7 @@ export default function Settings({ t, settings, setSettings, cloud, onClose }) {
           {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </label>
+      <LogPanel t={t} />
     </div>
   )
 }

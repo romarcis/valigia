@@ -19,3 +19,8 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# Google Sign-In (tauri-plugin-google-auth)
+-keep class com.google.android.gms.auth.** { *; }
+-keep class com.google.android.gms.common.** { *; }
+-keepattributes Signature
+-keepattributes *Annotation*

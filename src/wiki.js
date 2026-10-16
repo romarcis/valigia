@@ -71,3 +71,22 @@ async function nearbyPagesWithin(lang, lat, lng, metres) {
   const q = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', origin: '*', list: 'geosearch', gscoord: `${lat}|${lng}`, gsradius: String(metres), gslimit: '30' })
   return ((await getJson(`https://${lang}.wikipedia.org/w/api.php?${q}`)).query?.geosearch || []).map(g => g.title)
 }
+
+// Official website of a place, from Wikidata ("official website", P856; the preferred value first), reached
+// through its Wikipedia page. '' when it has none. Free and exact: no AI guessing a URL.
+const sites = new Map()
+export function officialSite(url) {
+  const m = /^https:\/\/(\w+)\.wikipedia\.org\/wiki\/(.+)$/.exec(url || '')
+  if (!m) return Promise.resolve('')
+  if (!sites.has(url)) {
+    sites.set(url, (async () => {
+      const q = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', origin: '*', redirects: '1', prop: 'pageprops', ppprop: 'wikibase_item', titles: decodeURIComponent(m[2]).replace(/_/g, ' ') })
+      const id = (await getJson(`https://${m[1]}.wikipedia.org/w/api.php?${q}`)).query?.pages?.[0]?.pageprops?.wikibase_item
+      if (!id) return ''
+      const { claims } = await getJson(`https://www.wikidata.org/w/api.php?${new URLSearchParams({ action: 'wbgetclaims', format: 'json', origin: '*', entity: id, property: 'P856' })}`)
+      const live = (claims?.P856 || []).filter(c => c.rank !== 'deprecated')
+      return (live.find(c => c.rank === 'preferred') || live[0])?.mainsnak?.datavalue?.value || ''
+    })().catch(e => { sites.delete(url); throw e }))
+  }
+  return sites.get(url)
+}

@@ -44,7 +44,7 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 
 /* ---------- shell ---------- */
 
-.app { height: 100dvh; display: grid; grid-template-rows: auto 1fr; }
+.app { height: 100dvh; display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); }
 
 .appbar {
   display: flex; align-items: center; gap: 12px;
@@ -153,7 +153,7 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 
 /* ---------- panes (settings, new trip, empty) ---------- */
 
-.pane { display: grid; gap: 22px; padding: 24px 24px 40px; }
+.pane { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; padding: 24px 24px 40px; }
 .pane-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .pane h1, .empty h1 { font-family: var(--display); font-weight: 800; font-size: 40px; line-height: .95; text-transform: uppercase; color: var(--navy); }
 .pane fieldset { margin: 0; padding: 18px 0 0; border: 0; border-top: 1.5px solid var(--rule-strong); display: grid; gap: 14px; }
@@ -204,13 +204,6 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
   font-family: var(--ui); font-size: 13px; font-weight: 800;
 }
 
-.map-overview {
-  position: absolute; left: 16px; top: 16px; display: inline-flex; align-items: center; gap: 8px;
-  max-width: calc(100% - 32px); padding: 8px 14px; border-radius: 999px;
-  border: 1.5px solid var(--navy); background: var(--sheet); color: var(--navy); font-weight: 700; cursor: pointer;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.map-overview[aria-pressed='true'] { background: var(--navy); color: #fff; }
 .maplibregl-popup-content { font: 600 14px var(--ui); color: var(--text); border-radius: var(--r); padding: 8px 12px; border: 1.5px solid var(--navy); box-shadow: none; }
 .maplibregl-popup-tip { display: none; }
 
@@ -259,9 +252,9 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 
 /* itinerary */
 .days { list-style: none; margin: 0; padding: 0; display: grid; gap: 30px; }
-.day h3 { display: flex; align-items: baseline; gap: 10px; font-size: 15px; }
+.day h3 { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.day-head { margin-bottom: 18px; } /* same gap below as above the day's name */
 .day-n { font-family: var(--display); font-weight: 800; font-size: 26px; text-transform: uppercase; color: var(--navy); }
-.day-title { margin: 2px 0 12px; font-weight: 600; }
 .timeline { list-style: none; margin: 0; padding: 0; border-left: 1.5px solid var(--ink); }
 .timeline li { position: relative; display: grid; grid-template-columns: 54px 1fr auto auto; gap: 10px; padding: 0 0 16px 14px; }
 .timeline li::before { content: ''; position: absolute; left: -6px; top: 6px; width: 9px; height: 9px; border-radius: 99px; background: var(--sheet); border: 1.5px solid var(--ink); }
@@ -304,7 +297,6 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 .sources summary { cursor: pointer; font-weight: 700; color: var(--navy); }
 .sources ul { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 6px; }
 .sources a { overflow-wrap: anywhere; }
-.panel-foot { padding: 8px 20px 28px; }
 
 .skeleton { display: grid; gap: 12px; width: 100%; }
 .skeleton span {
@@ -317,12 +309,10 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 /* ---------- phone ---------- */
 
 @media (max-width: 860px) {
-  body { overflow: auto; }
-  .app { height: auto; min-height: 100dvh; }
-  .workspace { grid-template-columns: 1fr; grid-template-rows: 44dvh auto; }
-  .map-wrap { order: -1; position: sticky; top: 0; height: 44dvh; z-index: 0; }
-  .panel { overflow: visible; border-right: 0; border-top: 1.5px solid var(--rule-strong); position: relative; z-index: 1; }
-  .rail, .tabs { position: static; }
+  /* phone: bar, then the map always in view, then the panel scrolling on its own under it */
+  .workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: 26dvh minmax(0, 1fr); }
+  .map-wrap { order: -1; }
+  .panel { border-right: 0; border-top: 1.5px solid var(--rule-strong); }
   .hide-sm { display: none; }
   .appbar { gap: 8px; padding-inline: 12px; }
   .wordmark { font-size: 22px; }
@@ -345,13 +335,8 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 
 /* ---------- activity log ---------- */
 
-.log-btn { position: relative; }
-.log-badge {
-  position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
-  background: var(--danger); color: #fff; font-size: 11px; font-weight: 800; line-height: 18px;
-}
 .log {
-  position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 5; max-height: 45%;
+  max-height: 50dvh; min-height: 0;
   display: grid; grid-template-rows: auto 1fr; border-radius: var(--r);
   background: var(--navy); color: #e6e9f2; border: 1.5px solid var(--navy);
 }
@@ -372,8 +357,8 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 }
 .tl-place:hover strong, h3 .tl-place:hover { text-decoration: underline; text-underline-offset: 3px; }
 .pin-inline { min-width: 26px; height: 20px; font-size: 13px; flex: none; cursor: inherit; }
-.timeline li.is-picked { background: color-mix(in srgb, var(--ink) 12%, var(--sheet)); border-radius: var(--r); padding: 8px 8px 10px 14px; }
-.timeline li.is-picked::before { background: var(--ink); top: 12px; }
+.timeline li.is-picked { background: color-mix(in srgb, var(--ink) 12%, var(--sheet)); border-radius: 0 var(--r) var(--r) 0; padding: 8px 8px 10px 14px; }
+.timeline li.is-picked::before { background: var(--ink); top: 14px; } /* the time moves down with the 8px padding */
 /* keep the next transfer clear of the highlight */
 .timeline li.is-picked { margin-bottom: 10px; }
 .timeline li.is-picked + li.transfer { margin-top: 0; }
@@ -497,7 +482,7 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 
 .tl-hotel .tl-place { cursor: default; } .tl-hotel .tl-place:hover strong { text-decoration: none; }
 /* the day's colour on the map */
-.day-swatch { display: inline-block; width: 18px; height: 5px; margin-right: 8px; border-radius: 999px; vertical-align: middle; }
+.day-swatch { display: inline-block; width: 18px; height: 5px; margin-right: 8px; border-radius: 999px; }
 
 /* place card: opened from a pin on the map */
 .place-card {
@@ -559,13 +544,21 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 
 /* phone: the map belongs to the trip; the place card is a sheet from the bottom; touch-sized targets */
 @media (max-width: 860px) {
-  .app:not(.view-trip) .workspace { grid-template-rows: auto; }
+  .app:not(.view-trip) .workspace { grid-template-rows: minmax(0, 1fr); }
   .app:not(.view-trip) .map-wrap { display: none; }
+  /* a place's or venue's details take the whole screen; the × (or Back) returns to the trip */
   .place-card {
-    position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 30; width: auto; max-height: 62dvh;
-    border-radius: var(--r) var(--r) 0 0; border-width: 1.5px 0 0;
+    /* under the app bar, which is never covered (bar = status bar or 10px, + 50px) */
+    position: fixed; inset: calc(max(10px, env(safe-area-inset-top)) + 50px) 0 0; z-index: 30; width: auto; max-height: none;
+    border-radius: 0; border: 0;
   }
-  .place-card > img { aspect-ratio: 16 / 7; }
+  .place-card > img { aspect-ratio: 4 / 3; }
+  /* same 16px gutter as the card's text, clear of rounded corners and the status bar */
+  .place-card-close { top: 16px; right: max(16px, env(safe-area-inset-right)); }
+  .place-card-body { padding-inline: 16px; }
+  .place-card-body h2 { padding-right: 56px; }
+  /* text scrolling up stops 20px below the photo (a margin outside the scroll box, not padding inside it) */
+  .place-card > img ~ .place-card-body { margin-top: 20px; padding-top: 0; }
 }
 @media (pointer: coarse) {
   .timeline li.transfer button { min-height: 40px; padding-inline: 12px; }
@@ -594,18 +587,8 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 /* ---------- day tabs ---------- */
 
 .day-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; margin: 0 -2px; }
-.day-tab {
-  flex: none; display: grid; justify-items: start; gap: 1px; min-width: 92px; padding: 7px 14px 8px;
-  border: 2px solid var(--ink); border-radius: var(--r); background: color-mix(in srgb, var(--ink) 12%, var(--sheet));
-  color: var(--text); cursor: pointer; text-align: left;
-  box-shadow: inset 4px 0 0 var(--ink);
-  transition: background-color .2s var(--ease), color .2s var(--ease);
-}
-.day-tab b { font-family: var(--display); font-weight: 800; font-size: 19px; line-height: 1; text-transform: uppercase; }
-.day-tab span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
-.day-tab:hover { background: color-mix(in srgb, var(--ink) 24%, var(--sheet)); }
-.day-tab.is-on { background: var(--ink); color: var(--on-ink); box-shadow: none; }
-.day-tab.is-on span { color: color-mix(in srgb, var(--on-ink) 82%, var(--ink)); }
+/* day tabs are luggage-label chips like the stops', each in its day's colour */
+.day-tab { flex: none; }
 .day-tab.is-drop { outline: 3px dashed var(--ink); outline-offset: 2px; }
 .pin.is-dim { opacity: .45; }
 .pin.is-dim:hover, .pin.is-dim:focus-visible { opacity: 1; }
@@ -619,7 +602,6 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 .find-card h3 { font-size: 17px; }
 .find-card[aria-busy='true'] { opacity: .75; }
 .find-days { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.find-days .day-tab { min-width: 0; padding: 6px 12px; }
 
 .place { position: relative; }
 .place-menu { position: absolute; top: 0; right: 0; }
@@ -677,3 +659,103 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 .reviews blockquote { margin: 0; padding-left: 10px; border-left: 3px solid var(--ink); }
 .reviews blockquote p { font-size: 14px; }
 .reviews blockquote footer { margin-top: 4px; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
+/* sign-in: nothing to plan yet, so no trip actions; on a phone the form takes the whole screen */
+.view-auth .appbar > :not(.wordmark) { display: none; }
+@media (max-width: 860px) {
+  .view-auth .panel { border-top: 0; }
+  .view-auth .auth { max-width: 480px; margin-inline: auto; }
+}
+
+/* the card never scrolls sideways: grid tracks may shrink below their content, long words and links wrap */
+.place-card, .place-card-body { grid-template-columns: minmax(0, 1fr); }
+.place-card-body { overflow-x: hidden; overflow-wrap: break-word; }
+.ticket-prices b, .price-conv { white-space: nowrap; }
+.place-card-body img, .place-card-body iframe { max-width: 100%; }
+
+/* day tabs lock under the Itinerario / Luoghi / Spostamenti bar (rail 63px + tabs bar ~56px, like .tabs' top: 63px) */
+.day-tabs { position: sticky; top: 119px; z-index: 2; background: var(--sheet); margin: -16px -16px 0; padding: 12px 16px 10px; border-bottom: 1.5px solid var(--rule); }
+
+/* phone: a day item reads top to bottom: time (with ⋮) on one line, then number + name,
+   the description across the whole width, and visit length left / Wikipedia right */
+@media (max-width: 860px) {
+  .timeline li:not(.transfer):not(.tl-hotel) { grid-template-columns: 1fr auto; grid-template-areas: 'time menu' 'body body'; row-gap: 6px; }
+  .timeline li:not(.transfer):not(.tl-hotel) > .tl-when { grid-area: time; align-self: start; }
+  .timeline li:not(.transfer):not(.tl-hotel) > div { grid-area: body; min-width: 0; }
+  .timeline li:not(.transfer):not(.tl-hotel) > img { display: none; } /* the photo is in the place's card */
+  .timeline li:not(.transfer):not(.tl-hotel) > .row-menu { grid-area: menu; align-self: start; margin-top: -8px; } /* centred on the time's line */
+  .timeline li .meta { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+}
+
+/* phone: day name and start time share one line */
+@media (max-width: 860px) {
+  .day-head { flex-wrap: nowrap; gap: 8px; }
+  .day h3 { gap: 6px; min-width: 0; white-space: nowrap; }
+  .day-swatch { width: 12px; margin-right: 0; }
+  .day-n { font-size: 22px; }
+  .day-start { gap: 6px; flex: none; }
+}
+
+/* stop switcher in the head: phone only (desktop has the chips) */
+.stop-pick, .stop-caret { display: none; }
+
+/* phone: no stop chips; the stop's red head, the Itinerario/Luoghi/Spostamenti bar and the day chips
+   stack and stay under the map while the panel scrolls (heights measured into --head-h / --tabs-h) */
+@media (max-width: 860px) {
+  .rail { display: none; }
+  .stop-head { position: sticky; top: 0; z-index: 3; gap: 10px; align-items: center; padding: 8px 12px 8px 16px; }
+  .stop-head .stop-num { font-size: 34px; }
+  .stop-head h1 { font-size: 24px; }
+  .stop-head p { margin-top: 2px; font-size: 13px; }
+  .stop-head .icon-btn { width: 36px; height: 36px; }
+  .stop-pick { display: block; position: absolute; inset: 0 76px 0 0; opacity: 0; cursor: pointer; }
+  .stop-caret { display: inline; margin-left: 6px; vertical-align: middle; }
+  /* each layer overlaps the one above by 1px, so no sliver of the scrolling list shows between them */
+  .tabs { top: calc(var(--head-h, 0px) - 1px); }
+  .day-tabs { top: calc(var(--head-h, 0px) + var(--tabs-h, 56px) - 2px); }
+}
+
+
+/* a day item's time: reads as plain text, edits in place; a time set by hand is inked and offers "automatic" */
+.tl-when { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; align-self: start; }
+@media (max-width: 860px) { .tl-when { flex-direction: row; align-items: center; } }
+.tl-time {
+  width: 54px; padding: 0; border: 1.5px solid transparent; border-radius: 4px; background: none;
+  font: 700 15px var(--ui); color: var(--muted); cursor: pointer;
+}
+.tl-time::-webkit-calendar-picker-indicator { display: none; }
+.tl-time:hover, .tl-time:focus { border-color: var(--rule-strong); background: #fff; color: var(--navy); }
+.tl-time.is-fixed { color: var(--ink); border-bottom-color: var(--ink); border-radius: 0; }
+.tl-auto { display: grid; place-items: center; width: 28px; height: 28px; margin: 0 0 0 -4px; border: 0; border-radius: 99px; background: none; color: var(--ink); cursor: pointer; }
+.tl-auto:hover { background: color-mix(in srgb, var(--ink) 14%, transparent); }
+@media (pointer: coarse) { .tl-auto { width: 40px; height: 40px; margin: -10px 0; } }
+
+/* meals and breaks are a different kind of stop: a 5% wash of the app bar's navy behind them (text unchanged);
+   same box as a picked item so the dot and time keep their line */
+.timeline li.is-break:not(.is-picked) { background: color-mix(in srgb, var(--navy) 5%, transparent); border-radius: 0 var(--r) var(--r) 0; padding: 8px 8px 10px 14px; margin-bottom: 10px; }
+.timeline li.is-break:not(.is-picked)::before { top: 14px; }
+
+/* venue actions sit on the right: "choose a place" and Change / Remove (the address keeps its own line) */
+.venue-add { margin-left: auto; }
+.venue-sub > span { flex-basis: 100%; }
+.venue-sub > button:first-of-type { margin-left: auto; }
+@media (pointer: coarse) { .venue-add { display: flex; } }
+
+/* stop head: arrival day and nights read as text, dotted-underlined, with the native picker laid over them */
+.stop-edit { position: relative; z-index: 1; display: inline-block; border-bottom: 1.5px dotted currentColor; cursor: pointer; }
+.stop-edit input, .stop-edit select { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
+.stop-edit:focus-within { outline: 2px solid var(--on-ink); outline-offset: 2px; }
+
+/* new stop form, at the foot of the itinerary */
+.add-stop { display: grid; gap: 12px; width: 100%; padding: 14px; border: 1.5px solid var(--rule-strong); border-radius: var(--r); }
+.add-stop h3 { font-size: 16px; color: var(--navy); }
+.add-stop-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 72px; gap: 10px; }
+@media (max-width: 860px) { .add-stop-row { grid-template-columns: minmax(0, 1fr) 72px; } .add-stop-row .field:nth-child(2) { grid-column: 1 / -1; grid-row: 2; } }
+
+/* trip ⋮ menu: icons beside the labels, a short warning before anything that cannot be undone */
+.stop-menu { width: 260px; }
+.ctx .ctx-note { padding: 8px 12px 10px; font-size: 14px; color: var(--text); max-width: 260px; }
+.ctx .ctx-strong { background: var(--navy); color: #fff; justify-content: center; }
+.ctx button:disabled { opacity: .45; cursor: default; }
+.ctx .ctx-danger + .ctx-danger { border-top: 0; }
+.add-stop { margin: 14px 16px 0; width: auto; }

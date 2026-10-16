@@ -22,3 +22,6 @@ key.properties
 # Cloudflare Worker local secrets and build output
 worker/.dev.vars
 worker/.wrangler/
+
+# Android Studio project files
+src-tauri/gen/android/.idea/

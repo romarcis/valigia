@@ -110,6 +110,13 @@ export default function PlaceCard({ t, lang, place: p, venue, tag, ink, onClose,
     wikiIntro(p.url).then(x => live && setIntro(x), () => live && setIntro(''))
     return () => { live = false }
   }, [p.url])
+  // Back (Android button or gesture, browser back) closes the card: it gets its own history entry.
+  useEffect(() => {
+    history.pushState({ card: true }, '')
+    const back = () => onClose()
+    addEventListener('popstate', back)
+    return () => { removeEventListener('popstate', back); if (history.state?.card) history.back() }
+  }, [onClose])
   useEffect(() => {
     const esc = e => e.key === 'Escape' && onClose()
     document.addEventListener('keydown', esc)
@@ -133,6 +140,7 @@ export default function PlaceCard({ t, lang, place: p, venue, tag, ink, onClose,
         <Ticket t={t} lang={lang} ticket={p.ticket} loading={ticketLoading} error={ticketError} kept={ticketKept} onRetry={onTicketRetry} cur={currency} />
         <p className="meta">
           {p.minutes ? <span><HourglassIcon size={14} aria-hidden /> {t.visitFor(t.min(p.minutes))}</span> : null}
+          {p.site && <a href={p.site} target="_blank" rel="noreferrer">{t.officialSite} · {host(p.site)} <ArrowSquareOutIcon size={13} aria-hidden /></a>}
           {p.url && <a href={p.url} target="_blank" rel="noreferrer">{t.readMore} <ArrowSquareOutIcon size={13} aria-hidden /></a>}
         </p>
       </div>

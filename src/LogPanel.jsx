@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { XIcon, CopyIcon } from '@phosphor-icons/react'
+import { CopyIcon } from '@phosphor-icons/react'
 import { subscribeLog } from './net.js'
 
 export function useLog() {
@@ -10,9 +10,11 @@ export function useLog() {
 
 const time = d => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-export default function LogPanel({ t, entries, onClose }) {
-  const end = useRef(null)
-  useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [entries])
+// Activity log, shown in Settings for now (temporary: to be removed). Follows the newest entry inside its own box.
+export default function LogPanel({ t }) {
+  const entries = useLog()
+  const list = useRef(null)
+  useEffect(() => { if (list.current) list.current.scrollTop = list.current.scrollHeight }, [entries])
   const copy = () => navigator.clipboard?.writeText(entries.map(e => `${time(e.at)} ${e.level.toUpperCase()} ${e.msg}`).join('\n'))
 
   return (
@@ -20,17 +22,15 @@ export default function LogPanel({ t, entries, onClose }) {
       <header className="log-head">
         <h2>{t.log}</h2>
         <button className="icon-btn" aria-label={t.copyLog} title={t.copyLog} onClick={copy}><CopyIcon size={18} aria-hidden /></button>
-        <button className="icon-btn" aria-label={t.close} onClick={onClose}><XIcon size={18} aria-hidden /></button>
       </header>
       {entries.length ? (
-        <ol className="log-list" aria-live="polite">
+        <ol className="log-list" aria-live="polite" ref={list}>
           {entries.map(e => (
             <li key={e.id} className={`log-${e.level}`}>
               <time>{time(e.at)}</time>
               <span>{e.msg}</span>
             </li>
           ))}
-          <li ref={end} aria-hidden />
         </ol>
       ) : <p className="log-empty">{t.logEmpty}</p>}
     </section>
