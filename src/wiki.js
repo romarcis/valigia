@@ -1,4 +1,5 @@
 import { getJson } from './net.js'
+import { sameName } from './util.js'
 
 // Batch lookup on Wikipedia: image, short extract, coordinates, page url.
 // Returns a Map keyed by the requested title (redirects/normalisation resolved).
@@ -50,5 +51,23 @@ export function wikiIntro(url) {
 // real, mappable candidates for the AI to choose places from.
 export async function nearbyPages(lang, lat, lng) {
   const q = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', origin: '*', list: 'geosearch', gscoord: `${lat}|${lng}`, gsradius: '10000', gslimit: '100' })
+  return ((await getJson(`https://${lang}.wikipedia.org/w/api.php?${q}`)).query?.geosearch || []).map(g => g.title)
+}
+
+// Wikipedia page for a place the user found on the map: the page near its position whose title
+// matches its name (a wrong article is worse than none), else the page with exactly that title if
+// it sits within 2 km. null when nothing fits.
+export async function wikiFor(lang, name, lat, lng) {
+  const near = (w, km) => lat == null || w.lat == null || Math.hypot(w.lat - lat, (w.lng - lng) * Math.cos(lat * Math.PI / 180)) * 111 <= km
+  if (lat != null) {
+    const titles = (await nearbyPagesWithin(lang, lat, lng, 600)).filter(title => sameName(name, title))
+    if (titles.length) return (await wikiLookup(lang, [titles[0]])).get(titles[0]) || null
+  }
+  const exact = (await wikiLookup(lang, [name])).get(name)
+  return exact && near(exact, 2) ? exact : null
+}
+
+async function nearbyPagesWithin(lang, lat, lng, metres) {
+  const q = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', origin: '*', list: 'geosearch', gscoord: `${lat}|${lng}`, gsradius: String(metres), gslimit: '30' })
   return ((await getJson(`https://${lang}.wikipedia.org/w/api.php?${q}`)).query?.geosearch || []).map(g => g.title)
 }

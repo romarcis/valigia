@@ -27,6 +27,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # compiled into the app for hotel/restaurant search (src-tauri/src/places.rs); without it the app uses OpenStreetMap only
           GOOGLE_PLACES_KEY: ${{ secrets.GOOGLE_PLACES_KEY }}
+          # Google sign-in (Desktop OAuth client); read by Vite at build time, kept out of the repo
+          VITE_GOOGLE_DESKTOP_ID: ${{ secrets.VITE_GOOGLE_DESKTOP_ID }}
+          VITE_GOOGLE_DESKTOP_SECRET: ${{ secrets.VITE_GOOGLE_DESKTOP_SECRET }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Valigia ${{ github.ref_name }}

@@ -89,11 +89,19 @@ export async function resolvePlace(p) {
   }
 }
 
+const cityCache = new Map()
+
+// Sights the user has heard of, around the stop (~25 km): monuments, museums, churches, parks, viewpoints.
+const SIGHT_TAGS = ['tourism', 'historic', 'amenity:place_of_worship', 'amenity:theatre', 'leisure:park', 'leisure:garden', 'natural:peak', 'natural:beach', 'man_made:tower', 'man_made:lighthouse']
+export async function searchSights(q, stop) {
+  const at = stop.lat != null ? stop : await cached(cityCache, `${stop.city}|${stop.country}`, () => findCity(stop.city, stop.country))
+  return searchBoth(q, at, 25, SIGHT_TAGS)
+}
+
 // Restaurants, cafés and bars within walking reach (~5 km) of a point.
 export const searchFood = (q, near) => searchBoth(q, near, 5, ['restaurant', 'cafe', 'fast_food', 'bar', 'pub', 'ice_cream'].map(x => `amenity:${x}`))
 
 // Hotels, B&Bs, hostels and apartments around a stop (~13 km). Before planning the stop has no position yet: look up its city.
-const cityCache = new Map()
 export async function searchHotels(q, stop) {
   const at = stop.lat != null ? stop : await cached(cityCache, `${stop.city}|${stop.country}`, () => findCity(stop.city, stop.country))
   return searchBoth(q, at, 13, ['hotel', 'guest_house', 'hostel', 'apartment', 'motel'].map(x => `tourism:${x}`))
@@ -120,4 +128,22 @@ export async function findNear(name, stop) {
   const same = x => x?.toLowerCase() === stop.city.toLowerCase()
   const f = ((await getJson(`https://photon.komoot.io/api/?${p}`)).features || []).find(x => same(x.properties.city) && sameName(name, x.properties.name || ''))
   return f ? { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] } : null
+}
+
+// Photo, Google rating and reviews of a meal venue, for its card. Kept for this session only (Google's terms
+// allow storing just the place id); null without Google or when no place close enough matches the name.
+const infoCache = new Map()
+export function venueInfo(v) {
+  return cached(infoCache, v.gid || `${v.name}|${v.lat}|${v.lng}`, async () => {
+    if (v.lat == null || !(await hasGoogle())) return null
+    try {
+      const d = await invoke('places_info', { id: v.gid || null, name: v.name, lat: v.lat, lng: v.lng, lang: lang() })
+      // a text match must be the same spot: within ~250 m of where the traveller put it
+      const far = !v.gid && (d.lat == null || Math.hypot(d.lat - v.lat, (d.lng - v.lng) * Math.cos(v.lat * Math.PI / 180)) * 111000 > 250)
+      return far ? null : d
+    } catch (e) {
+      log('error', `Google Places: dettagli di «${v.name}» non disponibili (${e})`)
+      return null
+    }
+  })
 }

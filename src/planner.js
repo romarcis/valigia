@@ -2,6 +2,7 @@ import { ask, parseJson } from './ai.js'
 import { wikiLookup, nearbyPages } from './wiki.js'
 import { findCity } from './search.js'
 import { log } from './net.js'
+import { toAmount } from './util.js'
 import { addDays, stopOffsets, cleanDays, renumber } from './util.js'
 
 const LANG_NAME = { it: 'Italian', en: 'English' }
@@ -102,6 +103,29 @@ ${nearby.length ? `- Real ${lang}.wikipedia.org pages with coordinates near ${st
     }), cleaned.days.map((d, i) => ({ ...d, date: addDays(from, i) }))),
     planned: true,
   }
+}
+
+// Entrance ticket of one place, from a web search: is it needed, prices, booking, the official booking page.
+// Without a real web search the links are dropped (a guessed URL is worse than none) and it reads as unverified.
+export async function findTicket(settings, trip, stopIdx, place) {
+  const stop = trip.stops[stopIdx]
+  const date = addDays(trip.startDate, stopOffsets(trip)[stopIdx])
+  const { text, sources, searched } = await ask(settings, {
+    search: true,
+    system: system(trip.lang),
+    prompt: `Search the web for the entrance ticket of "${place.name}" in ${stop.city}, ${stop.country}${place.url ? ` (Wikipedia: ${place.url})` : ''}, for a visit around ${date}.
+Use the official website when it exists. If any entrance price is published anywhere (official site, official reseller, recent travel guides), report it: at least the standard adult ticket. Use null only when no price can be found at all. Return:
+{"needed": true | false (free entry, or an outdoor place you simply walk into) | null (unknown),
+ "prices": [{"label": string (e.g. full, reduced, under 18, free on Sundays), "amount": number | null (in the local currency the site sells in), "currency": string (ISO 4217 code, e.g. EUR, GBP, TRY), "text": string | null (only when it is not a plain amount)}],
+ "booking": "required" | "recommended" | "not_needed" | null,
+ "book_url": string | null (the page where the ticket is bought or booked, official if possible),
+ "official_url": string | null,
+ "notes": string | null (one short sentence: closing days, timed entry, combined tickets)}`,
+  })
+  const d = parseJson(text)
+  if (!searched) { d.book_url = null; d.official_url = null }
+  const prices = (d.prices || []).map(x => ({ label: x.label, amount: toAmount(x.amount ?? x.eur), currency: (x.currency || 'EUR').toUpperCase(), text: x.text || null }))
+  return { needed: d.needed ?? null, prices, booking: d.booking || null, book_url: d.book_url || null, official_url: d.official_url || null, notes: d.notes || null, sources, unverified: !searched, at: new Date().toISOString() }
 }
 
 export async function findTransport(settings, trip, idx) {

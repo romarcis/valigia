@@ -1,5 +1,6 @@
 // node src/util.test.mjs
 import assert from 'node:assert/strict'
+import { nextSlot } from './util.js'
 import { addDays, stopOffsets, walkMinutes, cleanDays, moveItem, renumber, joinLegs, routeUpTo, placeTags, dayNumbers, removeItem, insertBreak, dropUnlocated, sameName, dayTone, contrast } from './util.js'
 
 assert.equal(addDays('2026-12-30', 3), '2027-01-02')
@@ -98,10 +99,13 @@ console.log('ok 8')
 {
   const ink = { bg: '#c8402a', fg: '#ffffff' }
   assert.equal(dayTone(ink, 0, 3), ink) // day 1 is the stop's ink
-  const d2 = dayTone(ink, 1, 2), d3 = dayTone(ink, 2, 3)
-  assert.notEqual(d2.bg, ink.bg)
-  assert.ok(contrast(d2.bg, d2.fg) >= 3 && contrast(d3.bg, d3.fg) >= 3, `${d2.bg} ${d3.bg}`) // pin numbers stay readable
-  assert.ok(contrast(d3.bg, '#eef0f2') < contrast(d2.bg, '#eef0f2')) // later days are lighter
+  const days = Array.from({ length: 6 }, (_, d) => dayTone(ink, d).bg)
+  assert.equal(new Set(days).size, 6) // six days, six different inks
+  assert.equal(dayTone(ink, 1).bg, '#e3a72b') // the palette order after vermilion
+  assert.equal(dayTone({ bg: '#1d6f78', fg: '#fff' }, 1).bg, '#c8402a') // wraps around
+  const d7 = dayTone(ink, 6)
+  assert.ok(!days.includes(d7.bg)) // seventh day: same ink as day 1, lighter
+  for (let d = 0; d < 12; d++) { const x = dayTone(ink, d); assert.ok(contrast(x.bg, x.fg) >= 3, `${d} ${x.bg}`) } // pin numbers stay readable
   console.log('ok 9')
 }
 
@@ -134,4 +138,79 @@ console.log('ok 8')
   r = insertBreak(days, { d: 0, i: 1 }, 'Cena')
   assert.equal(r[0].items[2].time, '13:00') // after the last item: one hour later
   console.log('ok 12')
+}
+
+{
+  const { cleanSettings, mergeTrips } = await import('./sync.js')
+  assert.deepEqual(cleanSettings({ lang: 'it', geminiKey: 'g', provider: 'gemini', openrouterModel: 'x', customUrl: 'u', currency: 'EUR' }), { lang: 'it', currency: 'EUR' })
+  const m = mergeTrips([{ id: 'a', updatedAt: 5, v: 'local' }, { id: 'b', updatedAt: 1 }], [{ id: 'a', updatedAt: 3, v: 'remote' }, { id: 'c', updatedAt: 9 }])
+  assert.deepEqual(m.map(t => t.id + (t.v || '')), ['c', 'alocal', 'b'])
+  console.log('ok sync')
+}
+
+assert.equal(nextSlot([]), '10:00')
+assert.equal(nextSlot([{ time: '09:30' }, { time: '15:15' }]), '16:45')
+assert.equal(nextSlot([{ time: '22:50' }]), '23:00') // never past 23:00
+console.log('ok slot')
+
+{
+  const { dayTimes, legMinutes, dayStart } = await import('./util.js')
+  assert.equal(dayStart({ items: [{ time: '11:00' }, { time: '9:30' }, { time: '' }] }), '9:30') // earliest, not first
+  assert.equal(dayStart({ start: '08:15', items: [{ time: '9:30' }] }), '08:15')
+  assert.equal(dayStart({ items: [] }), '09:00')
+  assert.equal(legMinutes({ walk: 12, drive: { min: 5 }, tr: { metro: { min: 7 } }, go: 'metro' }), 7)
+  assert.equal(legMinutes({ walk: 12, drive: { min: 5 }, go: 'car' }), 5)
+  assert.equal(legMinutes({ walk: 12, tr: { bus: null }, go: 'bus' }), 12) // no bus time: walking
+  const stop = {
+    hotel: { name: 'H', lat: 45.0, lng: 9.0 },
+    places: [{ name: 'A', minutes: 90, lat: 45.001, lng: 9.0 }, { name: 'B', minutes: 60, lat: 45.002, lng: 9.0 }],
+  }
+  const day = {
+    route: { legs: [10, 15, 20] }, // hotel->A, A->B, B->hotel
+    items: [
+      { place: 'A', placeIdx: 0 },
+      { place: 'Pranzo', placeIdx: null },
+      { place: 'B', placeIdx: 1, go: 'metro', transfer: { metro: { min: 6 } } },
+    ],
+  }
+  // 08:30 + 10 walk = 08:40 at A; +90 = 10:10 lunch, held to 12:30; +60 = 13:30, +6 metro = 13:36 -> 13:40 at B; +60 +20 back
+  assert.deepEqual(dayTimes(stop, day, '08:30'), { times: ['08:40', '12:30', '13:40'], back: '15:00' })
+  assert.equal(dayTimes(stop, day, ''), null)
+  const st = { places: [{ name: 'A', minutes: 60, lat: 45, lng: 9 }] }
+  const brk = name => dayTimes(st, { items: [{ place: 'A', placeIdx: 0 }, { place: name, placeIdx: null }, { place: 'Dopo', placeIdx: null }] }, '10:00').times[2]
+  assert.equal(brk('Pausa tè'), '11:20') // tea: 20 min
+  assert.equal(brk('Tea break'), '11:20')
+  assert.equal(brk('Pausa caffè'), '11:20')
+  assert.equal(brk('Teatro alla Scala'), '11:45') // not a tea: default 45 min
+  console.log('ok times')
+}
+
+{
+  const { regionCurrency, convert } = await import('./util.js')
+  assert.equal(regionCurrency('it-IT'), 'EUR')
+  assert.equal(regionCurrency('it'), 'EUR')
+  assert.equal(regionCurrency('en-GB'), 'GBP')
+  assert.equal(regionCurrency('en'), 'USD') // en -> US
+  assert.equal(regionCurrency('de-CH'), 'CHF')
+  assert.equal(regionCurrency('xx-QQ'), 'EUR') // unknown region: euro
+  const rates = { EUR: 1, GBP: 0.85, TRY: 55 }
+  assert.equal(convert(20, 'EUR', 'EUR', rates), 20)
+  assert.ok(Math.abs(convert(20, 'EUR', 'GBP', rates) - 17) < 1e-9)
+  assert.ok(Math.abs(convert(550, 'TRY', 'EUR', rates) - 10) < 1e-9)
+  assert.equal(convert(10, 'XYZ', 'EUR', rates), null)
+  console.log('ok currency')
+}
+
+{
+  const { toAmount, keepTicket } = await import('./util.js')
+  assert.equal(toAmount(20), 20)
+  assert.equal(toAmount('2.750 TRY'), 2750)
+  assert.equal(toAmount('€ 20,50'), 20.5)
+  assert.equal(toAmount('1,250.00'), 1250)
+  assert.equal(toAmount('3.000'), 3000)
+  assert.equal(toAmount('gratis'), null)
+  assert.equal(keepTicket({ prices: [{ amount: 1 }] }, { prices: [], needed: null }), true) // a worse search keeps the old prices
+  assert.equal(keepTicket({ prices: [{ amount: 1 }] }, { prices: [], needed: false }), false) // now free: take it
+  assert.equal(keepTicket({ prices: [] }, { prices: [] }), false)
+  console.log('ok ticket')
 }

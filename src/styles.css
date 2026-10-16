@@ -550,7 +550,7 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 .row-menu:hover { color: var(--navy); background: #e7eaf0; }
 @media (hover: hover) and (pointer: fine) {
   .row-menu { opacity: 0; }
-  .timeline li:hover .row-menu, .row-menu:focus-visible { opacity: 1; }
+  .timeline li:hover .row-menu, .place:hover .row-menu, .row-menu:focus-visible { opacity: 1; }
 }
 
 /* the browser's own surfaces, in the palette */
@@ -578,3 +578,102 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 .ctx .ctx-danger:hover, .ctx .ctx-danger:focus-visible { background: var(--danger); color: #fff; }
 .ctx .ctx-head { margin: 4px 0 0; padding: 8px 12px 4px; border-top: 1px solid var(--rule); font-size: 12px; font-weight: 700; color: var(--muted); }
 .ctx .ctx-add { justify-content: flex-start; gap: 8px; align-items: center; }
+
+/* ---------- account ---------- */
+
+.auth { max-width: 460px; }
+.auth-switch { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+.auth-guest { display: grid; gap: 8px; padding-top: 18px; border-top: 1.5px solid var(--rule); }
+.account b { overflow-wrap: anywhere; }
+
+.btn-google { border-color: var(--navy); background: #fff; color: var(--navy); min-height: 48px; }
+.btn-google:hover:not(:disabled) { background: #e7eaf0; }
+.auth-or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+.auth-or::before, .auth-or::after { content: ''; flex: 1; border-top: 1.5px solid var(--rule); }
+
+/* ---------- day tabs ---------- */
+
+.day-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; margin: 0 -2px; }
+.day-tab {
+  flex: none; display: grid; justify-items: start; gap: 1px; min-width: 92px; padding: 7px 14px 8px;
+  border: 2px solid var(--ink); border-radius: var(--r); background: color-mix(in srgb, var(--ink) 12%, var(--sheet));
+  color: var(--text); cursor: pointer; text-align: left;
+  box-shadow: inset 4px 0 0 var(--ink);
+  transition: background-color .2s var(--ease), color .2s var(--ease);
+}
+.day-tab b { font-family: var(--display); font-weight: 800; font-size: 19px; line-height: 1; text-transform: uppercase; }
+.day-tab span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.day-tab:hover { background: color-mix(in srgb, var(--ink) 24%, var(--sheet)); }
+.day-tab.is-on { background: var(--ink); color: var(--on-ink); box-shadow: none; }
+.day-tab.is-on span { color: color-mix(in srgb, var(--on-ink) 82%, var(--ink)); }
+.day-tab.is-drop { outline: 3px dashed var(--ink); outline-offset: 2px; }
+.pin.is-dim { opacity: .45; }
+.pin.is-dim:hover, .pin.is-dim:focus-visible { opacity: 1; }
+
+/* ---------- find a place ---------- */
+
+.find-place { display: grid; gap: 12px; padding-bottom: 18px; margin-bottom: 4px; border-bottom: 1.5px solid var(--rule); }
+.find-card { display: grid; grid-template-columns: 112px 1fr; gap: 12px 14px; padding: 14px; border: 1.5px solid var(--navy); border-radius: var(--r); background: #fff; }
+.find-card > img { width: 112px; height: 84px; object-fit: cover; border-radius: 4px; }
+.find-card > div:first-of-type:last-of-type, .find-card > div:only-of-type { grid-column: 1 / -1; }
+.find-card h3 { font-size: 17px; }
+.find-card[aria-busy='true'] { opacity: .75; }
+.find-days { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.find-days .day-tab { min-width: 0; padding: 6px 12px; }
+
+.place { position: relative; }
+.place-menu { position: absolute; top: 0; right: 0; }
+.ctx-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; box-shadow: 0 0 0 1.5px #fff; }
+.ctx .ctx-head-first { margin-top: 0; border-top: 0; padding-top: 4px; }
+
+/* ---------- day start time ---------- */
+
+.day-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.day-start { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.day-start input {
+  min-height: 36px; padding: 4px 8px; border: 1.5px solid var(--navy); border-radius: var(--r); background: #fff;
+  font-family: var(--display); font-weight: 800; font-size: 19px; color: var(--navy); accent-color: var(--navy);
+}
+.tl-hotel p b { color: var(--navy); }
+
+/* ---------- editable visit length ---------- */
+
+.stay {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; margin-left: -6px;
+  border: 1px dashed transparent; border-radius: 4px; background: none; font: inherit; color: inherit; cursor: text;
+}
+.stay:hover, .stay:focus-visible { border-color: var(--muted); color: var(--text); }
+.stay-edit { display: inline-flex; align-items: center; gap: 4px; }
+.stay-edit input { width: 64px; padding: 2px 6px; border: 1.5px solid var(--navy); border-radius: 4px; font: inherit; color: var(--text); }
+
+/* ---------- entrance ticket (place card) ---------- */
+
+.ticket { display: grid; gap: 8px; padding: 12px 0; border-top: 1.5px solid var(--rule); border-bottom: 1.5px solid var(--rule); }
+.ticket h3 { display: flex; align-items: center; gap: 6px; font-size: 15px; }
+.ticket-prices { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.ticket-prices li { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.ticket-prices b { font-family: var(--display); font-size: 18px; color: var(--navy); }
+.ticket-free { font-weight: 700; color: #1f6b4c; }
+.ticket-notes { font-size: 14px; }
+.ticket .tag { width: fit-content; }
+.ticket .note { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+
+.price-conv { display: grid; justify-items: end; line-height: 1.15; }
+.price-conv small { font-size: 12px; font-weight: 600; color: var(--muted); }
+.ticket-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ticket-foot .hint { flex: 1; min-width: 160px; }
+.currency-field { max-width: 360px; }
+.settings-close { margin-left: -4px; }
+.settings-close:hover:not(:disabled) { color: var(--navy); background: #e7eaf0; }
+.pane-head .seg { margin-left: auto; }
+
+/* ---------- meal venue card: Google rating and reviews ---------- */
+
+.photo-by { position: absolute; top: 8px; left: 8px; padding: 2px 6px; font-size: 11px; color: #fff; background: rgb(0 0 0 / .45); border-radius: 3px; }
+.reviews { display: grid; gap: 10px; padding-top: 12px; border-top: 1.5px solid var(--rule); }
+.reviews-score { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.reviews-score b { font-family: var(--display); font-size: 26px; line-height: 1; color: var(--navy); }
+.stars { display: inline-flex; font-size: 17px; color: #c8860f; }
+.reviews blockquote { margin: 0; padding-left: 10px; border-left: 3px solid var(--ink); }
+.reviews blockquote p { font-size: 14px; }
+.reviews blockquote footer { margin-top: 4px; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }

@@ -3,11 +3,12 @@ import {
   ArrowClockwiseIcon, ArrowSquareOutIcon, BedIcon, TrashIcon, HourglassIcon, ForkKnifeIcon, DotsThreeVerticalIcon,
   PersonSimpleWalkIcon, TrainSimpleIcon, TrainIcon, BusIcon, TramIcon, CarIcon, BoatIcon, AirplaneTiltIcon, TaxiIcon, PathIcon,
 } from '@phosphor-icons/react'
-import { stopOffsets, addDays, walkMinutes, dayNumbers, dayTone } from './util.js'
+import { stopOffsets, addDays, walkMinutes, dayNumbers, dayTone, dayTimes, dayStart, stayMinutes } from './util.js'
 import { canSearch } from './ai.js'
 
 import Combobox from './Combobox.jsx'
-import { searchFood, searchHotels, resolvePlace } from './search.js'
+import { searchFood, searchHotels, searchSights, resolvePlace } from './search.js'
+import { wikiFor } from './wiki.js'
 
 const MODE_ICON = { walk: PersonSimpleWalkIcon, metro: TrainSimpleIcon, bus: BusIcon, tram: TramIcon, train: TrainIcon, car: CarIcon, ferry: BoatIcon, flight: AirplaneTiltIcon, taxi: TaxiIcon }
 const ModeIcon = ({ mode, size = 20 }) => { const I = MODE_ICON[mode] || PathIcon; return <I size={size} aria-hidden /> }
@@ -91,7 +92,66 @@ function ItemMenu({ t, lang, days, at, x, y, onMove, onRemove, onInsert, onClose
   )
 }
 
-function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVenue, onGo, inkOf }) {
+// Menu of a place in Luoghi (or one just found): add it to a day, or remove it.
+function PlaceMenu({ t, lang, days, inkOf, x, y, onAdd, onRemove, onClose }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    ref.current?.querySelector('button')?.focus()
+    const close = e => { if (!ref.current?.contains(e.target)) onClose() }
+    const esc = e => e.key === 'Escape' && onClose()
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', esc) }
+  }, [onClose])
+  return (
+    <div ref={ref} className="ctx" role="menu" style={{ left: Math.max(8, Math.min(x, window.innerWidth - 250)), top: Math.max(8, Math.min(y, window.innerHeight - 90 - days.length * 40)) }}>
+      <p className="ctx-head ctx-head-first">{t.addToItinerary}</p>
+      {days.map((d, k) => (
+        <button key={k} role="menuitem" onClick={() => { onAdd(k); onClose() }}>
+          <span><span className="ctx-swatch" style={{ background: inkOf(k).bg }} aria-hidden /> {t.addToDayN(k + 1)}</span>
+          <span className="muted">{fmtDate(lang, d.date)}</span>
+        </button>
+      ))}
+      {onRemove && <button role="menuitem" className="ctx-danger" onClick={() => { onRemove(); onClose() }}>{t.removePlace}</button>}
+    </div>
+  )
+}
+
+const menuAt = e => {
+  if (e.type === 'contextmenu') return { x: e.clientX || 24, y: e.clientY || 24 }
+  const r = e.currentTarget.getBoundingClientRect()
+  return { x: r.left - 180, y: r.bottom }
+}
+
+// Length of a visit or break: click it and type the minutes.
+function Stay({ t, minutes, onSet }) {
+  const [edit, setEdit] = useState(false)
+  const [v, setV] = useState('')
+  const save = () => {
+    const n = Math.round(Number(v) / 5) * 5
+    if (n >= 5 && n <= 720) onSet(n)
+    setEdit(false)
+  }
+  if (edit) {
+    return (
+      <span className="stay-edit">
+        <HourglassIcon size={14} aria-hidden />
+        <input
+          type="number" min="5" max="720" step="5" value={v} autoFocus aria-label={t.visitTime}
+          onChange={e => setV(e.target.value)} onBlur={save}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } if (e.key === 'Escape') setEdit(false) }}
+        /> {t.minutesShort}
+      </span>
+    )
+  }
+  return (
+    <button type="button" className="stay" title={t.visitEdit} onClick={() => { setV(String(minutes)); setEdit(true) }}>
+      <HourglassIcon size={14} aria-hidden /> {t.visitFor(t.min(minutes))}
+    </button>
+  )
+}
+
+function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVenue, onGo, onStart, onStay, inkOf, day, setDay }) {
   const { places: tags, venues: venueTags } = dayNumbers(stop)
   const [editing, setEditing] = useState(null) // `${day}:${item}` whose venue is being chosen
   const drag = useRef(null) // {d, i} of the item being dragged
@@ -114,23 +174,50 @@ function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVen
 
   return (
     <>
+      {/* One tab per day, in the day's colour; dropping an item on a tab moves it to the end of that day. */}
+      <div className="day-tabs" role="tablist" aria-label={t.tabDays}>
+        {stop.days.map((d, i) => (
+          <button
+            key={i} role="tab" aria-selected={i === day} aria-controls="day-panel"
+            className={'day-tab' + (i === day ? ' is-on' : '') + (drop?.d === i && i !== day ? ' is-drop' : '')}
+            style={{ '--ink': inkOf(i).bg, '--on-ink': inkOf(i).fg }}
+            onClick={() => setDay(i)}
+            onDragOver={e => { if (drag.current && drag.current.d !== i) { e.preventDefault(); if (drop?.d !== i) setDrop({ d: i, i: d.items.length }) } }}
+            onDragLeave={() => setDrop(x => (x?.d === i ? null : x))}
+            onDrop={e => { finish(e); setDay(i) }}
+          >
+            <b>{t.day} {i + 1}</b>
+            <span>{fmtDate(lang, d.date, { weekday: 'short', day: 'numeric' })}</span>
+          </button>
+        ))}
+      </div>
       <p className="hint">{t.transferNote}</p>
-      <ol className="days">
+      <ol className="days" id="day-panel" role="tabpanel">
         {stop.days.map((d, i) => {
+          if (i !== day) return null
+          // The day's times always follow from its start: legs with the chosen mode + visit and break lengths,
+          // so adding, removing or moving anything re-times the whole day.
+          const clock = dayTimes(stop, d, dayStart(d))
           // With the hotel on the map, the day leaves from it and comes back to it (first and last route legs).
           const home = stop.hotel?.lat != null && d.items.some(it => (stop.places[placeIndex(stop, it)] || it.venue)?.lat != null) ? stop.hotel : null
           let last = home // last point of the day with coordinates
           let leg = -1 // index into d.route.legs: one leg between each pair of located places
           return (
             <li key={i} className="day">
-              <h3><span className="day-swatch" style={{ background: inkOf(i).bg }} aria-hidden /><span className="day-n">{t.day} {i + 1}</span> <span className="muted">{fmtDate(lang, d.date)}</span></h3>
+              <div className="day-head">
+                <h3><span className="day-swatch" style={{ background: inkOf(i).bg }} aria-hidden /><span className="day-n">{t.day} {i + 1}</span> <span className="muted">{fmtDate(lang, d.date)}</span></h3>
+                <label className="day-start">
+                  <span>{t.startAt}</span>
+                  <input type="time" step="300" value={dayStart(d).padStart(5, '0')} onChange={e => e.target.value && onStart(i, e.target.value)} />
+                </label>
+              </div>
               <p className="day-title">{d.title}</p>
               <ol
                 className={'timeline' + (drop?.d === i && drop.i === d.items.length ? ' drop-end' : '')}
                 onDragOver={e => { if (drag.current && e.target === e.currentTarget) { e.preventDefault(); setDrop({ d: i, i: d.items.length }) } }}
                 onDrop={finish}
               >
-                {home && <HotelRow t={t} name={home.name} />}
+                {home && <HotelRow t={t} name={home.name} time={dayStart(d)} />}
                 {d.items.flatMap((it, j) => {
                   const idx = placeIndex(stop, it)
                   const p = idx != null ? stop.places[idx] : null
@@ -154,7 +241,7 @@ function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVen
                       onContextMenu={e => { e.preventDefault(); setMenu({ at: { d: i, i: j }, x: e.clientX || 24, y: e.clientY || e.currentTarget.getBoundingClientRect().bottom }) }}
                       title={t.dragHint}
                     >
-                      <time>{it.time}</time>
+                      <time>{clock?.times[j] ?? it.time}</time>
                       <div>
                         {idx != null ? (
                           <button className="tl-place" aria-pressed={idx === picked} onClick={() => onPick(idx)}>
@@ -171,12 +258,10 @@ function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVen
                           </>
                         )}
                         {it.note && <p>{it.note}</p>}
-                        {(p?.minutes || p?.url) && (
-                          <p className="meta">
-                            {p.minutes ? <span title={t.visitTime}><HourglassIcon size={14} aria-hidden /> {t.visitFor(t.min(p.minutes))}</span> : null}
-                            {p.url && <a href={p.url} target="_blank" rel="noreferrer" draggable={false}>{t.readMore} <ArrowSquareOutIcon size={13} aria-hidden /></a>}
-                          </p>
-                        )}
+                        <p className="meta">
+                          <Stay t={t} minutes={stayMinutes(stop, it)} onSet={m => onStay(i, j, m)} />
+                          {p?.url && <a href={p.url} target="_blank" rel="noreferrer" draggable={false}>{t.readMore} <ArrowSquareOutIcon size={13} aria-hidden /></a>}
+                        </p>
                       </div>
                       {p?.img && <img src={p.img} alt="" loading="lazy" draggable={false} />}
                       <button
@@ -191,7 +276,7 @@ function Days({ t, stop, lang, picked, onPick, onMove, onRemove, onInsert, onVen
                 })}
                 {home && last !== home && [
                   <Transfer key="back" t={t} walk={d.route?.legs?.[leg + 1] ?? walkMinutes(last, home)} drive={d.route?.drives?.[leg + 1]} go={d.backGo} onGo={m => onGo(i, 'back', m)} />,
-                  <HotelRow key="hotel-end" t={t} name={home.name} back />,
+                  <HotelRow key="hotel-end" t={t} name={home.name} back time={clock?.back} />,
                 ]}
               </ol>
             </li>
@@ -236,13 +321,13 @@ function Venue({ t, venue, n, ink, picked, onPick, near, editing, onEdit, onSet 
   )
 }
 
-function HotelRow({ t, name, back }) {
+function HotelRow({ t, name, back, time }) {
   return (
     <li className="tl-hotel">
       <span className="tl-hotel-icon"><BedIcon size={18} aria-hidden /></span>
       <div>
         <span className="tl-place"><span className="pin pin-inline" aria-hidden>0</span><strong>{name}</strong></span>
-        <p>{back ? t.hotelBack : t.hotelLeave}</p>
+        <p>{back ? t.hotelBack : t.hotelLeave}{time && <> · <b>{time}</b></>}</p>
       </div>
     </li>
   )
@@ -280,16 +365,74 @@ function HotelBox({ t, stop, onSave }) {
 }
 
 // Only the places the itinerary does not visit yet: they have no number until a day visits them.
-function Places({ t, stop, picked, onPick }) {
+// "I have heard of it": find a sight the AI did not suggest, preview it, add it to a day (or keep it under Luoghi).
+function FindPlace({ t, stop, lang, inkOf, onAdd }) {
+  const [found, setFound] = useState(null) // { name, addr, lat, lng, wiki? }
+  const [menu, setMenu] = useState(null) // {x, y}
+  const [loading, setLoading] = useState(false)
+  const search = useCallback(q => searchSights(q, stop), [stop])
+  const pick = async p => {
+    setLoading(true)
+    setFound({ ...p })
+    try {
+      const full = await resolvePlace(p)
+      const wiki = await wikiFor(lang, full.name, full.lat, full.lng).catch(() => null)
+      setFound({ ...full, wiki })
+    } finally {
+      setLoading(false)
+    }
+  }
+  const add = d => {
+    const w = found.wiki
+    onAdd({
+      name: found.name, why: found.addr || t.addedByYou, minutes: 60, mine: true,
+      lat: found.lat ?? w?.lat ?? null, lng: found.lng ?? w?.lng ?? null,
+      ...(w && { img: w.img, extract: w.extract, url: w.url }),
+    }, d)
+    setFound(null)
+  }
+  return (
+    <section className="find-place">
+      <Combobox
+        label={t.findPlace} placeholder={t.findPlacePh} emptyText={t.noPlace} delay={300}
+        value={null} display={p => p?.name || ''} onChange={pick} search={search}
+        renderOption={p => <><b>{p.name}</b> <span className="muted">{p.addr}</span></>}
+      />
+      {found && (
+        <div className="find-card" aria-busy={loading}>
+          {found.wiki?.img && <img src={found.wiki.img} alt="" />}
+          <div>
+            <h3>{found.name}</h3>
+            {found.addr && <p className="muted">{found.addr}</p>}
+            {found.wiki?.extract && <p className="place-extract">{found.wiki.extract}</p>}
+            {!loading && found.lat == null && <p className="note">{t.notOnMap}</p>}
+          </div>
+          <div className="find-days">
+            <button className="btn btn-ink" onClick={e => setMenu(menuAt(e))} disabled={loading} aria-haspopup="menu">
+              <DotsThreeVerticalIcon size={18} weight="bold" aria-hidden /> {t.addToItinerary}
+            </button>
+            <button className="btn btn-quiet" onClick={() => add(null)} disabled={loading}>{t.keepInPlaces}</button>
+            <button className="btn btn-quiet" onClick={() => setFound(null)}>{t.cancel}</button>
+          </div>
+        </div>
+      )}
+      {menu && found && <PlaceMenu t={t} lang={lang} days={stop.days} inkOf={inkOf} {...menu} onAdd={add} onClose={() => setMenu(null)} />}
+    </section>
+  )
+}
+
+function Places({ t, stop, lang, picked, onPick, inkOf, onAddPlace, onSchedule, onDropPlace }) {
+  const [menu, setMenu] = useState(null) // {i, x, y}
   const used = new Set(stop.days.flatMap(d => d.items.map(it => placeIndex(stop, it))))
   const rest = stop.places.map((p, i) => [p, i]).filter(([, i]) => !used.has(i))
-  if (!rest.length) return <p className="muted">{t.allInItinerary}</p>
   return (
     <>
+    <FindPlace t={t} stop={stop} lang={lang} inkOf={inkOf} onAdd={onAddPlace} />
+    {!rest.length ? <p className="muted">{t.allInItinerary}</p> : <>
     <p className="hint">{t.placesNote}</p>
     <ol className="places">
       {rest.map(([p, i]) => (
-        <li key={p.name} data-place={i} className={'place' + (i === picked ? ' is-picked' : '')}>
+        <li key={p.name} data-place={i} className={'place' + (i === picked ? ' is-picked' : '')} onContextMenu={e => { e.preventDefault(); setMenu({ i, ...menuAt(e) }) }}>
           <div className="place-img">
             {p.img ? <img src={p.img} alt={p.name} loading="lazy" /> : <span className="place-noimg" aria-hidden>•</span>}
           </div>
@@ -302,9 +445,16 @@ function Places({ t, stop, picked, onPick }) {
               {p.url && <a href={p.url} target="_blank" rel="noreferrer">{t.readMore} <ArrowSquareOutIcon size={13} aria-hidden /></a>}
             </p>
           </div>
+          <button type="button" className="icon-btn row-menu place-menu" aria-label={t.placeMenu(p.name)} title={t.placeMenu(p.name)} aria-haspopup="menu"
+            onClick={e => setMenu({ i, ...menuAt(e) })}>
+            <DotsThreeVerticalIcon size={20} weight="bold" aria-hidden />
+          </button>
         </li>
       ))}
     </ol>
+    </>}
+    {menu && <PlaceMenu t={t} lang={lang} days={stop.days} inkOf={inkOf} x={menu.x} y={menu.y}
+      onAdd={k => onSchedule(menu.i, k)} onRemove={() => onDropPlace(menu.i)} onClose={() => setMenu(null)} />}
     </>
   )
 }
@@ -357,7 +507,7 @@ function Fetch({ t, label, hint, Icon, onRun, busy, err, warn }) {
   )
 }
 
-export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab, picked, onPick, onMove, onRemove, onInsert, onVenue, onGo, busy, errors, settings, run, onSaveHotel, onDelete }) {
+export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab, day, setDay, picked, onPick, onAddPlace, onSchedule, onDropPlace, onStart, onStay, onMove, onRemove, onInsert, onVenue, onGo, busy, errors, settings, run, onSaveHotel, onDelete }) {
   const stop = trip.stops[active]
   const lang = trip.lang
   const from = addDays(trip.startDate, stopOffsets(trip)[active])
@@ -418,7 +568,7 @@ export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab
           busy[k('plan')] ? <><p className="muted">{t.planningStop(stop.city)}</p><Skeleton rows={8} /></>
           : errors[k('plan')] ? <div className="fetch"><p className="error" role="alert">{errors[k('plan')]}</p><button className="btn btn-ink" onClick={() => run('plan')}>{t.retry}</button></div>
           : !stop.planned ? <div className="fetch"><button className="btn btn-ink" onClick={() => run('plan')}>{t.replan}</button></div>
-          : tab === 'days' ? <Days t={t} stop={stop} lang={lang} picked={picked} onPick={onPick} onMove={onMove} onRemove={onRemove} onInsert={onInsert} onVenue={onVenue} onGo={onGo} inkOf={d => dayTone(inks[active % inks.length], d, stop.days.length)} /> : <Places t={t} stop={stop} picked={picked} onPick={onPick} />
+          : tab === 'days' ? <Days t={t} stop={stop} lang={lang} picked={picked} onPick={onPick} onMove={onMove} onRemove={onRemove} onInsert={onInsert} onVenue={onVenue} onGo={onGo} onStart={onStart} onStay={onStay} inkOf={d => dayTone(inks[active % inks.length], d, stop.days.length)} day={Math.min(day, stop.days.length - 1)} setDay={setDay} /> : <Places t={t} stop={stop} lang={lang} picked={picked} onPick={onPick} inkOf={d => dayTone(inks[active % inks.length], d, stop.days.length)} onAddPlace={onAddPlace} onSchedule={onSchedule} onDropPlace={onDropPlace} />
         )}
 
         {tab === 'moves' && (stop.moves && !busy[k('moves')] ? (
@@ -434,11 +584,11 @@ export default function StopPanel({ t, trip, active, onSelect, inks, tab, setTab
         ) : <Fetch t={t} label={t.findMoves} hint={t.movesHint} Icon={PathIcon} onRun={() => run('moves')} busy={busy[k('moves')]} err={errors[k('moves')]} warn={noSearch} />)}
       </div>
 
-      <footer className="panel-foot">
+      {tab === 'days' && <footer className="panel-foot">
         <button className={'btn ' + (armed ? 'btn-danger' : 'btn-danger-quiet')} onClick={() => (armed ? onDelete() : setArmed(true))} onBlur={() => setArmed(false)}>
           <TrashIcon size={16} aria-hidden /> {armed ? t.confirmDelete : t.deleteTrip}
         </button>
-      </footer>
+      </footer>}
     </div>
   )
 }

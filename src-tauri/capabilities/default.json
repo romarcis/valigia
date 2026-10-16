@@ -9,9 +9,9 @@
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "https://openrouter.ai/*" },
-        { "url": "https://generativelanguage.googleapis.com/*" },
-        { "url": "https://api.deepseek.com/*" },
+        { "url": "https://open.er-api.com/*" },
+        { "url": "https://oauth2.googleapis.com/*" },
+        { "url": "https://valigia-ai.romarcis.workers.dev/*" },
         { "url": "https://*.wikipedia.org/*" },
         { "url": "https://routing.openstreetmap.de/*" },
         { "url": "https://www.wikidata.org/*" },

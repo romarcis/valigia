@@ -1,0 +1,18 @@
+{
+  "name": "valigia-ai",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-01",
+  // Limits are knobs: change them here and `npx wrangler deploy` again.
+  "vars": {
+    "FIREBASE_PROJECT": "valigia-e78f7",
+    "MODEL": "deepseek-flash",
+    "USER_DAY": "100",   // AI requests a day per signed-in user
+    "GUEST_DAY": "30",   // per guest (anonymous Firebase user)
+    "ALL_DAY": "3000",   // for everyone together: caps the worst-case daily cost
+    "MAX_CHARS": "60000" // system + prompt
+  },
+  // DEEPSEEK_KEY is a secret: `npx wrangler secret put DEEPSEEK_KEY`
+  "durable_objects": { "bindings": [{ "name": "QUOTA", "class_name": "Quota" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Quota"] }],
+  "observability": { "enabled": true }
+}

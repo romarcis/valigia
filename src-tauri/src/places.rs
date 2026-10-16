@@ -79,3 +79,74 @@ pub async fn places_details(id: String, lang: String, session: String) -> Result
     lng: p["location"]["longitude"].as_f64().ok_or("no location")?,
   })
 }
+
+#[derive(Serialize)]
+pub struct Review {
+  author: String,
+  rating: Option<f64>,
+  text: String,
+  when: String,
+}
+
+#[derive(Serialize)]
+pub struct Info {
+  id: String,
+  lat: Option<f64>,
+  lng: Option<f64>,
+  rating: Option<f64>,
+  count: Option<u64>,
+  url: Option<String>,
+  photo: Option<String>,
+  photo_by: Option<String>,
+  reviews: Vec<Review>,
+}
+
+const INFO_FIELDS: &str = "id,location,rating,userRatingCount,googleMapsUri,photos,reviews";
+
+// Photo, rating and reviews of a restaurant or café, for its card. By Google id when it came from Google,
+// otherwise the best text match near its position (the caller checks it is really that place).
+// Not stored anywhere: Google's terms allow keeping only the place id.
+#[tauri::command]
+pub async fn places_info(id: Option<String>, name: String, lat: f64, lng: f64, lang: String) -> Result<Info, String> {
+  let k = key()?;
+  let c = Client::new();
+  let p = match id {
+    Some(id) => send(c.get(format!("{API}/places/{id}?languageCode={lang}")).header("X-Goog-Api-Key", k).header("X-Goog-FieldMask", INFO_FIELDS)).await?,
+    None => {
+      let body = json!({
+        "textQuery": name,
+        "languageCode": lang,
+        "maxResultCount": 1,
+        "locationBias": { "circle": { "center": { "latitude": lat, "longitude": lng }, "radius": 150.0 } },
+      });
+      let mask = INFO_FIELDS.split(',').map(|f| format!("places.{f}")).collect::<Vec<_>>().join(",");
+      let res = send(c.post(format!("{API}/places:searchText")).header("X-Goog-Api-Key", k).header("X-Goog-FieldMask", mask).header("Content-Type", "application/json").body(body.to_string())).await?;
+      res["places"][0].clone()
+    }
+  };
+  if p.is_null() {
+    return Err("not-found".into());
+  }
+  // The photo's short-lived public address (skipHttpRedirect), so the key never ends up in an <img>.
+  let first = &p["photos"][0];
+  let photo = match first["name"].as_str() {
+    Some(n) => send(c.get(format!("{API}/{n}/media?maxWidthPx=800&skipHttpRedirect=true")).header("X-Goog-Api-Key", k)).await.ok().and_then(|r| r["photoUri"].as_str().map(String::from)),
+    None => None,
+  };
+  Ok(Info {
+    id: p["id"].as_str().unwrap_or("").to_string(),
+    lat: p["location"]["latitude"].as_f64(),
+    lng: p["location"]["longitude"].as_f64(),
+    rating: p["rating"].as_f64(),
+    count: p["userRatingCount"].as_u64(),
+    url: p["googleMapsUri"].as_str().map(String::from),
+    photo,
+    photo_by: first["authorAttributions"][0]["displayName"].as_str().map(String::from),
+    reviews: p["reviews"].as_array().into_iter().flatten().take(3).map(|r| Review {
+      author: r["authorAttribution"]["displayName"].as_str().unwrap_or("").to_string(),
+      rating: r["rating"].as_f64(),
+      text: r["text"]["text"].as_str().or(r["originalText"]["text"].as_str()).unwrap_or("").to_string(),
+      when: r["relativePublishTimeDescription"].as_str().unwrap_or("").to_string(),
+    }).collect(),
+  })
+}

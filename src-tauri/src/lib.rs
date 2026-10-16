@@ -1,3 +1,4 @@
+mod oauth;
 mod places;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -5,7 +6,7 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_http::init())
-    .invoke_handler(tauri::generate_handler![places::places_available, places::places_autocomplete, places::places_details])
+    .invoke_handler(tauri::generate_handler![places::places_available, places::places_autocomplete, places::places_details, places::places_info, oauth::oauth_listen])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
